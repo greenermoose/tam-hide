@@ -27,3 +27,13 @@ Wayland session; instrument lock acknowledgement and VT transitions, test
 crash and restart at every handoff, and record observable leaks and recovery.
 No installation, account changes or live-seat experiments are authorized
 by this note.
+
+## VM preparation
+
+The official 2026.11.01 Arch ISO matched its published SHA-256 and reached
+the boot menu in QEMU 11.1.2 using software emulation. No guest sessions
+were started. KVM was unavailable, and QEMU exposed no local graphical
+display backend. A loopback VNC listener started outside the sandbox, but
+no VNC viewer was found. A display and input path remains to be set up;
+this is a preparation gap, not evidence that the experiment is impossible.
+No handoff, crash, VT, hotplug or authentication property was tested.

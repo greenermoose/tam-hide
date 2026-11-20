@@ -1,0 +1,25 @@
+W3 VM FEASIBILITY PREPARATION
+
+Date: 2026-11-20
+AI harness: Codex 0.171.0
+AI model: gpt-6.1-terra (medium; identified by Fred)
+Continues: W2
+
+GUIDANCE
+
+  Fred: "Take the next slice of work for tam-hide."
+  Fred: "Implement the plan."
+
+DONE
+
+  Verified the Arch ISO checksum and reached its QEMU boot menu with TCG.
+  Confirmed a loopback VNC listener can start outside the sandbox.
+
+FAILED
+
+  No local graphical backend or VNC viewer was found. Guest setup and
+  seat tests were not completed; no security property was established.
+
+HANDOFF
+
+  Set up guest display and input and perform the experiment in upstream/.

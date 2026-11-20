@@ -4,10 +4,12 @@ STATE
 
   Version 0.0.0. No locker is implemented. The field survey and initial
   documentation feasibility study are in upstream/ and ideas/.
+  QEMU reached the Arch ISO boot menu; no seat tests have been run.
 
 NEXT
 
-  1. Run the disposable VM experiment in upstream/2026-11-20-seat-feasibility.md.
+  1. Set up guest display and input, then run the disposable VM experiment
+     in upstream/2026-11-20-seat-feasibility.md.
   2. Resolve whole-seat handoff and failure recovery before building a lock.
 
 WATCH OUT
