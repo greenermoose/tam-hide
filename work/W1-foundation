@@ -1,5 +1,9 @@
 W1 - FOUNDATION
 
+Date: 2026-11-20
+AI harness: Codex 0.171.0
+AI model: gpt-6.1-terra (medium; identified by Fred)
+
 Created the initial repository and recorded the requested behavior and
 the whole-seat security boundary. tam-pane does not yet have the desktop
 protocols needed to verify a locker. No locking code or live system change
