@@ -1,0 +1,15 @@
+WHATNOW
+
+STATE
+
+  Version 0.0.0. No locker is implemented. The field survey and initial
+  documentation feasibility study are in upstream/ and ideas/.
+
+NEXT
+
+  1. Run the disposable VM experiment in upstream/2026-11-20-seat-feasibility.md.
+  2. Resolve whole-seat handoff and failure recovery before building a lock.
+
+WATCH OUT
+
+  This project does not protect a workstation. No live login changes.

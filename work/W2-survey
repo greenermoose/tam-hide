@@ -1,0 +1,26 @@
+W2 SCREEN LOCK SURVEY
+
+Date: 2026-11-20
+AI harness: Codex 0.171.0
+AI model: GPT-6 (exact model ID not established)
+
+GUIDANCE
+
+  Fred: "Do a survey of projects that provide a similar screen lock or
+  system hiding feature."
+  Fred: "I accept your recommendation. Proceed and populate the ideas
+  folder with the results of your research."
+
+DONE
+
+  Recorded project notes, survey and documentation feasibility study.
+  The initial empty commit enabled the repository path claim.
+
+FAILED
+
+  No VM experiment has been run. Documentation alone cannot prove safe
+  handoff between existing console and graphical sessions.
+
+HANDOFF
+
+  Run the isolated experiment described in the feasibility study.

@@ -1,0 +1,11 @@
+W1 - FOUNDATION
+
+Created the initial repository and recorded the requested behavior and
+the whole-seat security boundary. tam-pane does not yet have the desktop
+protocols needed to verify a locker. No locking code or live system change
+was made.
+
+HANDOFF
+
+  Establish a secure seat-control design and implement P1. The project
+  is not yet suitable for use as a lock.

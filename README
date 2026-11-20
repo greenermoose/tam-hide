@@ -1,0 +1,15 @@
+TAM-HIDE - WORKSTATION PRIVACY FOR TAMLINUX
+
+tam-hide is planned to hide a workstation and select an account by
+passcode. It is not implemented and cannot lock or protect a system.
+Do not use this repository as a security control.
+
+Follows the tam-idol 0.2.0 standard.
+
+WHERE THINGS ARE
+
+  arch/       security and compositor design
+  plans/      implementation phases
+  work/       current handoff and session records
+  ROADMAP.md  planned milestones
+  UPSTREAM.md upstream code and references
