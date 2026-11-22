@@ -33,10 +33,11 @@ bool power_policy_parse_seconds(const char *arg, uint32_t *out_ms) {
 
 bool power_policy_on_locked(struct power_policy *p, bool has_idle,
 							bool has_power) {
+	(void)has_power;
 	if (!p)
 		return false;
 	p->locked = true;
-	p->enabled = (p->timeout_ms > 0 && has_idle && has_power);
+	p->enabled = (p->timeout_ms > 0 && has_idle);
 	return p->enabled;
 }
 

@@ -14,7 +14,7 @@ STATE
   test_lock_state, test_power_policy, test_auth) and the 2-output headless
   `tam-pane` integration test (make test-headless: lock, 2x POWER_OFF idle
   blanking, disabled-blank mode, fail-closed SIGTERM; build/tam-hide SHA-256:
-  7316bea7e9afff2d6585069c21e83146e0662b1fea6ca188a6650a190114fee7).
+  def909abc6ba4774795b47d9f203b11d023951d0df96647dc18d549a029cf273).
 
   The existing VM-verified C11 VT seat-controller prototype (tam-hided,
   tam-hidectl, controller.c, vt.c) remains intact and ready for Phase 2.

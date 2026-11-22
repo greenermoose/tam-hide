@@ -28,8 +28,9 @@ bool power_policy_parse_seconds(const char *arg, uint32_t *out_ms);
 
 /*
  * Record that ext_session_lock_v1.locked fired.
- * Returns true if idle blanking should be armed (requires timeout_ms > 0,
- * ext_idle_notifier_v1 + wl_seat, and zwlr_output_power_manager_v1).
+ * Returns true if idle blanking should be armed (requires timeout_ms > 0 and
+ * ext_idle_notifier_v1 + wl_seat; if zwlr_output_power_manager_v1 is absent,
+ * software black-screen blanking still runs).
  */
 bool power_policy_on_locked(struct power_policy *p, bool has_idle,
 							bool has_power);

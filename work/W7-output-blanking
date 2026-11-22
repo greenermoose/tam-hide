@@ -27,6 +27,11 @@ DONE
       outputs while blanked, wakes and redraws on resumed (with wl_keyboard
       fallback), degrades gracefully on missing globals or output power
       failure, and restores power before unlock.
+    - src/render.{h,c} & src/wl_lock.c: render a pure-black (#000000) frame
+      on idle blank alongside zwlr_output_power_v1.set_mode(OFF) so outputs
+      without hardware DPMS (such as nested Wayland windows, where tam-pane
+      now ignores OFF to avoid unmapping the host window) still blank and
+      wake cleanly.
     - src/tam-hide.c: added --blank-after SECONDS (default 30, 0 disables).
   - Added tests/test_power_policy.c and extended tests/test_wayland_lock.c
     and tests/test_tam_pane_headless.sh to verify 2-output idle blanking
@@ -38,7 +43,7 @@ DONE
     and work/WHATNOW.
   - Verified with `make clean && make all test test-headless`
     (build/tam-hide SHA-256:
-    7316bea7e9afff2d6585069c21e83146e0662b1fea6ca188a6650a190114fee7).
+    def909abc6ba4774795b47d9f203b11d023951d0df96647dc18d549a029cf273).
 
 FAILED
 

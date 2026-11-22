@@ -44,10 +44,13 @@ static void test_graceful_degradation(void) {
 	assert(!power_policy_on_locked(&p, false, true));
 	assert(!power_policy_on_idle(&p, false));
 
-	/* Missing zwlr_output_power_manager_v1. */
+	/* Missing zwlr_output_power_manager_v1 still arms software black blanking. */
 	power_policy_init(&p, 30000);
-	assert(!power_policy_on_locked(&p, true, false));
-	assert(!power_policy_on_idle(&p, false));
+	assert(power_policy_on_locked(&p, true, false));
+	assert(power_policy_on_idle(&p, false));
+	assert(p.blanked);
+	assert(power_policy_on_activity(&p));
+	assert(!p.blanked);
 }
 
 static void test_blank_wake_and_unlock(void) {

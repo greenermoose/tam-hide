@@ -160,7 +160,7 @@ static struct wl_buffer *render_shm_buffer(struct wl_lock_ctx *ctx,
 	}
 
 	lock_render_frame(pixels, logical_w, logical_h, scale, &ctx->state,
-					  lock_monotonic_ms());
+					  lock_monotonic_ms(), ctx->power_policy.blanked);
 	munmap(pixels, size);
 
 	struct wl_shm_pool *pool = wl_shm_create_pool(ctx->shm, fd, (int32_t)size);
@@ -460,6 +460,7 @@ static void idle_idled(void *data, struct ext_idle_notification_v1 *notif) {
 		return;
 	int64_t now_ms = lock_monotonic_ms();
 	(void)lock_state_clear(&ctx->state, now_ms);
+	render_all_outputs(ctx);
 	set_outputs_power(ctx, false);
 	emit_event(ctx, "BLANKED\n");
 }

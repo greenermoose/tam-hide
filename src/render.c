@@ -4,6 +4,7 @@
 #include <cairo/cairo.h>
 #include <math.h>
 #include <pango/pangocairo.h>
+#include <string.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -25,7 +26,7 @@ static void draw_rounded_rect(cairo_t *cr, double x, double y, double w,
 
 void lock_render_frame(uint32_t *pixels, uint32_t logical_w, uint32_t logical_h,
 					   int32_t scale, const struct lock_state *st,
-					   int64_t now_ms) {
+					   int64_t now_ms, bool blanked) {
 	if (!pixels || logical_w == 0 || logical_h == 0)
 		return;
 	if (scale < 1)
@@ -34,6 +35,11 @@ void lock_render_frame(uint32_t *pixels, uint32_t logical_w, uint32_t logical_h,
 	int phys_w = (int)logical_w * scale;
 	int phys_h = (int)logical_h * scale;
 	int stride = phys_w * 4;
+
+	if (blanked) {
+		memset(pixels, 0, (size_t)stride * (size_t)phys_h);
+		return;
+	}
 
 	cairo_surface_t *surf = cairo_image_surface_create_for_data(
 		(unsigned char *)pixels, CAIRO_FORMAT_RGB24, phys_w, phys_h, stride);
