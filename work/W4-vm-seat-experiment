@@ -1,0 +1,42 @@
+W4 DISPOSABLE VM SEAT FEASIBILITY EXPERIMENT
+
+Date: 2026-11-22
+AI harness: Antigravity CLI 1.5.14
+AI model: Gemini 4 Neon (Medium)
+Continues: W3
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice of tam-hide."
+  Fred: "Approved. Proceed."
+
+DONE
+
+  - Booted the Arch 2026.11.01 live ISO under KVM with bochs-display,
+    virtio-keyboard-pci, QMP key injection, QMP screendump verification,
+    serial bootstrap, and root SSH (no host packages or live changes).
+  - Ran multi-session tests T1-T7 with two console users (alice on tty2,
+    bob on tty3), a Wayland session (sway 1.12 + swaylock 1.8.6 on tty4),
+    and a dedicated lock VT (tty6).
+  - Proved empirically that logind LockSession does not lock, Wayland
+    ext-session-lock-v1 alone does not block Ctrl+Alt+F*, and both
+    vlock --all and VT_PROCESS fail open under SIGKILL.
+  - Proved that kernel VT_LOCKSWITCH persists fail-closed across SIGKILL,
+    swaylock SIGKILL stays fail-closed (solid red), exec sway SIGKILL
+    closes the session cleanly (non-exec exposes the parent shell),
+    atomic controller handoff keeps VT_LOCKSWITCH active (~48 ms), and
+    output hotplug is covered by ext-session-lock-v1.
+  - Recorded results in upstream/2026-11-22-seat-vm-experiment.md,
+    documented the resolved architecture in arch/seat-control.md, and
+    updated plans/P1-lock.md and work/WHATNOW.
+
+FAILED
+
+  Nothing. (Initial sway launch in the VM hit autovt@tty4 holding tty4
+  and TTYVHangup SIGHUP; masking autovt@tty{2,3,4,6} resolved both.)
+
+HANDOFF
+
+  Build and test the minimal seat-controller prototype (VT_LOCKSWITCH,
+  atomic handoff, dedicated lock VT, and systemd restart recovery) in a
+  disposable VM before adding the Hyprland adapter and passcode store.

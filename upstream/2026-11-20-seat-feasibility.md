@@ -37,3 +37,7 @@ display backend. A loopback VNC listener started outside the sandbox, but
 no VNC viewer was found. A display and input path remains to be set up;
 this is a preparation gap, not evidence that the experiment is impossible.
 No handoff, crash, VT, hotplug or authentication property was tested.
+
+Follow-up: the disposable VM experiment (T1-T7) was executed on 2026-11-22
+using KVM, `bochs-display`, QMP key injection, and QMP `screendump`; see
+[2026-11-22-seat-vm-experiment.md](2026-11-22-seat-vm-experiment.md).

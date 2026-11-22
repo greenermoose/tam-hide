@@ -1,17 +1,36 @@
 WHATNOW
 
+What tam-hide is doing now and what comes next. Read this first; revise it
+at the end of every session (work/README-work).
+
+Updated: 2026-11-22, with W4
+
 STATE
 
-  Version 0.0.0. No locker is implemented. The field survey and initial
-  documentation feasibility study are in upstream/ and ideas/.
-  QEMU reached the Arch ISO boot menu; no seat tests have been run.
+  Version 0.0.0 on dev. No locker is implemented yet. The disposable KVM
+  whole-seat feasibility experiment (T1-T7) is complete (W4), recorded in
+  upstream/2026-11-22-seat-vm-experiment.md, and the resolved seat-control
+  and crash-recovery design is in arch/seat-control.md.
 
 NEXT
 
-  1. Set up guest display and input, then run the disposable VM experiment
-     in upstream/2026-11-20-seat-feasibility.md.
-  2. Resolve whole-seat handoff and failure recovery before building a lock.
+  1. Prototype the minimal privileged seat controller in an isolated VM
+     (dedicated lock VT, persistent VT_LOCKSWITCH, atomic VT handoff, and
+     systemd Restart=always recovery) per arch/seat-control.md and
+     plans/P1-lock.md.
+  2. Define the compositor adapter interface and verify Hyprland's
+     ext-session-lock-v1, crash, hotplug, and blanking/wake behavior in
+     the disposable VM.
+  3. Design and implement the privileged salted-hash passcode store, rate
+     limiting, and multi-account/session picker.
+
+WAITING FOR FRED
+
+  Nothing.
 
 WATCH OUT
 
-  This project does not protect a workstation. No live login changes.
+  This project does not protect a workstation. No live login or seat
+  changes without explicit approval and a recorded rollback point.
+  Do not rely on vlock --all or VT_PROCESS (both failed open on SIGKILL).
+  Graphical sessions must launch compositors via exec as session leader.
