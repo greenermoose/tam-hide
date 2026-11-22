@@ -3,35 +3,38 @@ WHATNOW
 What tam-hide is doing now and what comes next. Read this first; revise it
 at the end of every session (work/README-work).
 
-Updated: 2026-11-22, with W6
+Updated: 2026-11-22, with W7
 
 STATE
 
-  Version 0.1.0 on dev. Phase 1 (`tam-hide` Wayland `ext-session-lock-v1`
-  locker for `tam-pane`) is implemented, passes all automated unit tests
-  (test_controller, test_lock_state, test_auth) and the 2-output headless
-  `tam-pane` integration test (make test-headless), and passed Fred's nested
-  `sandbox/demo-tam-pane` check (build/tam-hide SHA-256:
-  5832df123aba2bf6036ff14c80575c112a7723ebee20e2e863f51cba10ebfc34).
+  Version 0.1.1 on dev. Phase 1 and Phase 1b (`tam-hide` Wayland
+  `ext-session-lock-v1` locker with `ext_idle_notifier_v1` +
+  `zwlr_output_power_manager_v1` output blanking and wake for `tam-pane`)
+  are implemented and pass all automated unit tests (test_controller,
+  test_lock_state, test_power_policy, test_auth) and the 2-output headless
+  `tam-pane` integration test (make test-headless: lock, 2x POWER_OFF idle
+  blanking, disabled-blank mode, fail-closed SIGTERM; build/tam-hide SHA-256:
+  7316bea7e9afff2d6585069c21e83146e0662b1fea6ca188a6650a190114fee7).
 
   The existing VM-verified C11 VT seat-controller prototype (tam-hided,
   tam-hidectl, controller.c, vt.c) remains intact and ready for Phase 2.
 
 NEXT
 
-  1. Implement Phase 1b (0.1.1): output blanking and wake via
-     zwlr_output_power_manager_v1 and ext_idle_notifier_v1 under tam-pane.
+  1. Run Fred's nested `sandbox/demo-tam-pane` check for 0.1.1 (10s idle
+     blanking and wake).
   2. Broaden to Phase 2 (0.2.0): wire tam-hide lock confirmation into
      tam-hided before atomic VT handoff, and implement the privileged
      Argon2id salted-hash passcode store and multi-account/session picker.
 
 WAITING FOR FRED
 
-  Nothing.
+  Optional nested `sandbox/demo-tam-pane` visual confirmation of 0.1.1
+  blanking/wake.
 
 WATCH OUT
 
-  Phase 1 (0.1.0) locks the active tam-pane Wayland session only; it does
+  Phase 1/1b (0.1.1) locks the active tam-pane Wayland session only; it does
   not yet engage kernel VT_LOCKSWITCH or protect other virtual terminals.
   No live login or seat changes without explicit approval and a recorded
   rollback point. Do not install systemd/tam-hided.service on a live host.

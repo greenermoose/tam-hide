@@ -15,14 +15,23 @@ PAM_LIBS := -lpam
 
 WAYLAND_PROTOCOLS_DIR := $(shell $(PKG_CONFIG) --variable=pkgdatadir wayland-protocols)
 SESSION_LOCK_XML := $(WAYLAND_PROTOCOLS_DIR)/staging/ext-session-lock/ext-session-lock-v1.xml
+IDLE_NOTIFY_XML := $(WAYLAND_PROTOCOLS_DIR)/staging/ext-idle-notify/ext-idle-notify-v1.xml
+OUTPUT_POWER_XML := protocols/wlr-output-power-management-unstable-v1.xml
 
 BUILD := build
 PROTO_DIR := $(BUILD)/protocols
-PROTO_H := $(PROTO_DIR)/ext-session-lock-v1-client-protocol.h
-PROTO_C := $(PROTO_DIR)/ext-session-lock-v1-protocol.c
+SESSION_LOCK_H := $(PROTO_DIR)/ext-session-lock-v1-client-protocol.h
+SESSION_LOCK_C := $(PROTO_DIR)/ext-session-lock-v1-protocol.c
+IDLE_NOTIFY_H := $(PROTO_DIR)/ext-idle-notify-v1-client-protocol.h
+IDLE_NOTIFY_C := $(PROTO_DIR)/ext-idle-notify-v1-protocol.c
+OUTPUT_POWER_H := $(PROTO_DIR)/wlr-output-power-management-unstable-v1-client-protocol.h
+OUTPUT_POWER_C := $(PROTO_DIR)/wlr-output-power-management-unstable-v1-protocol.c
 
-LOCK_CORE_SRCS := src/wl_lock.c src/render.c src/lock_state.c src/auth.c $(PROTO_C)
-LOCK_CORE_HDRS := src/wl_lock.h src/render.h src/lock_state.h src/auth.h $(PROTO_H)
+PROTO_HDRS := $(SESSION_LOCK_H) $(IDLE_NOTIFY_H) $(OUTPUT_POWER_H)
+PROTO_SRCS := $(SESSION_LOCK_C) $(IDLE_NOTIFY_C) $(OUTPUT_POWER_C)
+
+LOCK_CORE_SRCS := src/wl_lock.c src/render.c src/lock_state.c src/power_policy.c src/auth.c $(PROTO_SRCS)
+LOCK_CORE_HDRS := src/wl_lock.h src/render.h src/lock_state.h src/power_policy.h src/auth.h $(PROTO_HDRS)
 
 .PHONY: all test test-headless install clean
 
@@ -31,10 +40,22 @@ all: $(BUILD)/tam-hide $(BUILD)/tam-hided $(BUILD)/tam-hidectl
 $(BUILD) $(PROTO_DIR):
 	mkdir -p $@
 
-$(PROTO_H): $(SESSION_LOCK_XML) | $(PROTO_DIR)
+$(SESSION_LOCK_H): $(SESSION_LOCK_XML) | $(PROTO_DIR)
 	$(WAYLAND_SCANNER) client-header $< $@
 
-$(PROTO_C): $(SESSION_LOCK_XML) | $(PROTO_DIR)
+$(SESSION_LOCK_C): $(SESSION_LOCK_XML) | $(PROTO_DIR)
+	$(WAYLAND_SCANNER) private-code $< $@
+
+$(IDLE_NOTIFY_H): $(IDLE_NOTIFY_XML) | $(PROTO_DIR)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+$(IDLE_NOTIFY_C): $(IDLE_NOTIFY_XML) | $(PROTO_DIR)
+	$(WAYLAND_SCANNER) private-code $< $@
+
+$(OUTPUT_POWER_H): $(OUTPUT_POWER_XML) | $(PROTO_DIR)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+$(OUTPUT_POWER_C): $(OUTPUT_POWER_XML) | $(PROTO_DIR)
 	$(WAYLAND_SCANNER) private-code $< $@
 
 $(BUILD)/tam-hide: src/tam-hide.c src/auth_pam.c $(LOCK_CORE_SRCS) $(LOCK_CORE_HDRS) | $(BUILD)
@@ -53,6 +74,9 @@ $(BUILD)/test_controller: tests/test_controller.c src/controller.c src/vt.c src/
 $(BUILD)/test_lock_state: tests/test_lock_state.c src/lock_state.c src/lock_state.h | $(BUILD)
 	$(CC) $(CFLAGS) -Isrc -o $@ tests/test_lock_state.c src/lock_state.c $(LDFLAGS)
 
+$(BUILD)/test_power_policy: tests/test_power_policy.c src/power_policy.c src/power_policy.h | $(BUILD)
+	$(CC) $(CFLAGS) -Isrc -o $@ tests/test_power_policy.c src/power_policy.c $(LDFLAGS)
+
 $(BUILD)/test_auth: tests/test_auth.c src/auth.c src/auth.h src/lock_state.h | $(BUILD)
 	$(CC) $(CFLAGS) -Isrc -o $@ tests/test_auth.c src/auth.c $(LDFLAGS)
 
@@ -60,9 +84,10 @@ $(BUILD)/test_wayland_lock: tests/test_wayland_lock.c $(LOCK_CORE_SRCS) $(LOCK_C
 	$(CC) $(CFLAGS) -Isrc -I$(PROTO_DIR) $(WL_CFLAGS) -o $@ \
 		tests/test_wayland_lock.c $(LOCK_CORE_SRCS) $(LDFLAGS) $(WL_LIBS)
 
-test: $(BUILD)/test_controller $(BUILD)/test_lock_state $(BUILD)/test_auth $(BUILD)/test_wayland_lock
+test: $(BUILD)/test_controller $(BUILD)/test_lock_state $(BUILD)/test_power_policy $(BUILD)/test_auth $(BUILD)/test_wayland_lock
 	./$(BUILD)/test_controller
 	./$(BUILD)/test_lock_state
+	./$(BUILD)/test_power_policy
 	./$(BUILD)/test_auth
 
 test-headless: $(BUILD)/test_wayland_lock

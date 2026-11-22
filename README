@@ -3,11 +3,12 @@ TAM-HIDE - WORKSTATION PRIVACY FOR TAMLINUX
 tam-hide locks a Tamlinux workstation cleanly and without disclosing account
 or session details.
 
-Version 0.1.0 implements the Phase 1 Wayland session locker (`tam-hide`) for
-use with `tam-pane` (0.2.0+) via `ext-session-lock-v1` and PAM authentication
-for the current user. Whole-seat VT locking (`tam-hided` + `VT_LOCKSWITCH` +
-Argon2id multi-account selection) is Phase 2; do not treat 0.1.0 as a
-whole-seat VT security boundary yet.
+Version 0.1.1 implements the Phase 1/1b Wayland session locker (`tam-hide`) for
+use with `tam-pane` (0.2.0+) via `ext-session-lock-v1`, PAM authentication for
+the current user, and idle output blanking/wake via `ext_idle_notifier_v1` and
+`zwlr_output_power_manager_v1` (`--blank-after SECONDS`, default 30). Whole-seat
+VT locking (`tam-hided` + `VT_LOCKSWITCH` + Argon2id multi-account selection) is
+Phase 2; do not treat 0.1.1 as a whole-seat VT security boundary yet.
 
 Follows the tam-idol 0.2.0 standard.
 

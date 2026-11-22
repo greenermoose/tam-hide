@@ -1,0 +1,53 @@
+W7 PHASE 1B OUTPUT BLANKING AND WAKE (0.1.1)
+
+Date: 2026-11-22
+AI harness: Antigravity CLI 1.5.14
+AI model: Gemini 4 Neon (Medium)
+Continues: W6
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice of tam-hide."
+  Approved plan: 30s default blanking timeout (--blank-after SECONDS, 0
+  disables), printable wake keys wake and type into the password buffer
+  while pointer motion / modifiers / Escape wake without typing.
+
+DONE
+
+  - Implemented Phase 1b (0.1.1) output blanking and wake for tam-hide:
+    - protocols/wlr-output-power-management-unstable-v1.xml: vendored
+      MIT-licensed protocol XML for standalone builds, documented in
+      UPSTREAM.md.
+    - src/power_policy.{h,c}: Wayland-free blanking/wake state machine and
+      --blank-after seconds parser.
+    - src/wl_lock.{h,c}: bound ext_idle_notifier_v1 (preferring v2
+      get_input_idle_notification with v1 fallback) and
+      zwlr_output_power_manager_v1; blanks all outputs on idled (skipping
+      while verifying and wiping any half-typed password), handles hotplugged
+      outputs while blanked, wakes and redraws on resumed (with wl_keyboard
+      fallback), degrades gracefully on missing globals or output power
+      failure, and restores power before unlock.
+    - src/tam-hide.c: added --blank-after SECONDS (default 30, 0 disables).
+  - Added tests/test_power_policy.c and extended tests/test_wayland_lock.c
+    and tests/test_tam_pane_headless.sh to verify 2-output idle blanking
+    (BLANKED + 2x POWER_OFF), disabled-blank mode (--blank-after-ms 0), and
+    fail-closed SIGTERM while blanked.
+  - Updated sandbox/demo-tam-pane and sandbox/demo-tam-pane.lua to exercise
+    --blank-after 10 in nested tam-pane.
+  - Bumped VERSION to 0.1.1 and updated README, UPSTREAM.md, plans/P1-lock.md,
+    and work/WHATNOW.
+  - Verified with `make clean && make all test test-headless`
+    (build/tam-hide SHA-256:
+    7316bea7e9afff2d6585069c21e83146e0662b1fea6ca188a6650a190114fee7).
+
+FAILED
+
+  Nothing.
+
+HANDOFF
+
+  1. Optionally run Fred's nested `sandbox/demo-tam-pane` check to visually
+     confirm 10s idle blanking and wake in nested tam-pane.
+  2. Proceed to Phase 2 (0.2.0): wire tam-hide lock confirmation into
+     tam-hided before atomic VT handoff, and implement the privileged
+     Argon2id salted-hash passcode store and multi-account/session picker.

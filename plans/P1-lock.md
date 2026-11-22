@@ -1,6 +1,6 @@
 # P1: Session and whole-seat lock
 
-Status: Phase 1 (`0.1.0`) implemented and verified for `tam-pane` (`dev`), including Fred's nested `sandbox/demo-tam-pane` check.
+Status: Phase 1 (`0.1.0`) and Phase 1b (`0.1.1`) implemented and verified for `tam-pane` (`dev`).
 
 ## Completed groundwork
 
@@ -28,9 +28,16 @@ Status: Phase 1 (`0.1.0`) implemented and verified for `tam-pane` (`dev`), inclu
      gate active until a newly launched locker unlocks).
    - Verified with unit tests (`make test`), 2-output headless `tam-pane`
      integration test (`make test-headless`), and nested `sandbox/demo-tam-pane`.
-2. **Phase 1b (`0.1.1`, next): Display blanking and wake**
-   - Bind `zwlr_output_power_manager_v1` (already exposed by `tam-pane` 0.2.0)
-     and `ext_idle_notifier_v1` to blank outputs while locked and wake on input.
+2. **Phase 1b (`0.1.1`, implemented in W7): Display blanking and wake**
+   - Bound `zwlr_output_power_manager_v1` and `ext_idle_notifier_v1` (preferring
+     v2 `get_input_idle_notification` with v1 fallback) inside `src/wl_lock.c`
+     with a unit-tested `src/power_policy.{h,c}` state machine.
+   - Blanks all outputs after `--blank-after SECONDS` of idle (default 30s,
+     `0` disables), clears any half-typed password on blank, wakes and redraws
+     on input (`resumed` / keyboard fallback), degrades gracefully if protocols
+     are absent or an output reports `failed`, and restores power before unlock.
+   - Verified with `make test` (`test_power_policy`) and 2-output headless
+     `tam-pane` (`make test-headless`).
 3. **Phase 2 (`0.2.0`): Broaden to whole-seat VT locking**
    - Wire `tam-hide` lock confirmation (`--ready-fd` / adapter IPC) into
      `tam-hided` before atomic VT handoff.

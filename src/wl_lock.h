@@ -6,6 +6,7 @@
 
 #include <signal.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 struct wl_lock_config {
 	auth_verify_fn verify_fn;
@@ -14,6 +15,10 @@ struct wl_lock_config {
 	int ready_fd;
 	/* Optional signal stop flag; if set, exits WITHOUT unlocking (fail-closed). */
 	const volatile sig_atomic_t *stop_flag;
+	/* Idle timeout in ms before blanking outputs while locked (0 disables). */
+	uint32_t blank_timeout_ms;
+	/* Optional fd to receive power/idle state lines for headless tests (-1 if unused). */
+	int event_fd;
 };
 
 /*

@@ -1,8 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "wl_lock.h"
+#include "ext-idle-notify-v1-client-protocol.h"
 #include "ext-session-lock-v1-client-protocol.h"
 #include "lock_state.h"
+#include "power_policy.h"
 #include "render.h"
+#include "wlr-output-power-management-unstable-v1-client-protocol.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -25,6 +28,9 @@ struct wl_lock_output {
 	int32_t scale;
 	struct wl_surface *surface;
 	struct ext_session_lock_surface_v1 *lock_surface;
+	struct zwlr_output_power_v1 *power;
+	bool power_known;
+	uint32_t power_mode;
 	uint32_t width;
 	uint32_t height;
 	bool configured;
@@ -40,6 +46,10 @@ struct wl_lock_ctx {
 	struct wl_keyboard *keyboard;
 	struct ext_session_lock_manager_v1 *lock_mgr;
 	struct ext_session_lock_v1 *lock;
+	struct ext_idle_notifier_v1 *idle_notifier;
+	uint32_t idle_notifier_ver;
+	struct ext_idle_notification_v1 *idle_notif;
+	struct zwlr_output_power_manager_v1 *output_power_mgr;
 
 	struct xkb_context *xkb_ctx;
 	struct xkb_keymap *xkb_keymap;
@@ -47,6 +57,7 @@ struct wl_lock_ctx {
 
 	struct wl_lock_output *outputs;
 	struct lock_state state;
+	struct power_policy power_policy;
 	struct auth_job auth;
 
 	bool locked;
@@ -54,6 +65,58 @@ struct wl_lock_ctx {
 	bool done;
 	int exit_code;
 };
+
+static void emit_event(struct wl_lock_ctx *ctx, const char *line) {
+	if (!ctx || ctx->cfg.event_fd < 0 || !line)
+		return;
+	(void)write(ctx->cfg.event_fd, line, strlen(line));
+}
+
+static void output_power_mode(void *data, struct zwlr_output_power_v1 *power,
+							  uint32_t mode) {
+	(void)power;
+	struct wl_lock_output *out = data;
+	out->power_known = true;
+	out->power_mode = mode;
+	emit_event(out->ctx, (mode == ZWLR_OUTPUT_POWER_V1_MODE_OFF)
+							 ? "POWER_OFF\n"
+							 : "POWER_ON\n");
+}
+
+static void output_power_failed(void *data, struct zwlr_output_power_v1 *power) {
+	struct wl_lock_output *out = data;
+	zwlr_output_power_v1_destroy(power);
+	if (out->power == power)
+		out->power = NULL;
+	out->power_known = false;
+}
+
+static const struct zwlr_output_power_v1_listener output_power_listener = {
+	.mode = output_power_mode,
+	.failed = output_power_failed,
+};
+
+static void attach_output_power(struct wl_lock_ctx *ctx,
+								struct wl_lock_output *out) {
+	if (!ctx->output_power_mgr || !out->wl_output || out->power)
+		return;
+	if (!ctx->power_policy.enabled)
+		return;
+	out->power = zwlr_output_power_manager_v1_get_output_power(
+		ctx->output_power_mgr, out->wl_output);
+	if (!out->power)
+		return;
+	zwlr_output_power_v1_add_listener(out->power, &output_power_listener, out);
+}
+
+static void set_outputs_power(struct wl_lock_ctx *ctx, bool on) {
+	uint32_t mode = on ? ZWLR_OUTPUT_POWER_V1_MODE_ON
+					   : ZWLR_OUTPUT_POWER_V1_MODE_OFF;
+	for (struct wl_lock_output *o = ctx->outputs; o; o = o->next) {
+		if (o->power)
+			zwlr_output_power_v1_set_mode(o->power, mode);
+	}
+}
 
 static void buffer_release(void *data, struct wl_buffer *buffer) {
 	(void)data;
@@ -177,6 +240,8 @@ static void create_lock_surface_for_output(struct wl_lock_ctx *ctx,
 static void destroy_output(struct wl_lock_output *out) {
 	if (!out)
 		return;
+	if (out->power)
+		zwlr_output_power_v1_destroy(out->power);
 	if (out->lock_surface)
 		ext_session_lock_surface_v1_destroy(out->lock_surface);
 	if (out->surface)
@@ -293,6 +358,12 @@ static void kb_key(void *data, struct wl_keyboard *kb, uint32_t serial,
 	if (state != WL_KEYBOARD_KEY_STATE_PRESSED || !ctx->xkb_state)
 		return;
 
+	if (power_policy_on_activity(&ctx->power_policy)) {
+		set_outputs_power(ctx, true);
+		render_all_outputs(ctx);
+		emit_event(ctx, "WOKEN\n");
+	}
+
 	int64_t now_ms = lock_monotonic_ms();
 	uint32_t keycode = key + 8;
 	xkb_keysym_t sym = xkb_state_key_get_one_sym(ctx->xkb_state, keycode);
@@ -379,10 +450,60 @@ static const struct wl_seat_listener seat_listener = {
 	.name = seat_name,
 };
 
+static void idle_idled(void *data, struct ext_idle_notification_v1 *notif) {
+	(void)notif;
+	struct wl_lock_ctx *ctx = data;
+	if (ctx->unlocked || ctx->done)
+		return;
+	bool verifying = (ctx->state.ui_state == LOCK_UI_VERIFYING);
+	if (!power_policy_on_idle(&ctx->power_policy, verifying))
+		return;
+	int64_t now_ms = lock_monotonic_ms();
+	(void)lock_state_clear(&ctx->state, now_ms);
+	set_outputs_power(ctx, false);
+	emit_event(ctx, "BLANKED\n");
+}
+
+static void idle_resumed(void *data, struct ext_idle_notification_v1 *notif) {
+	(void)notif;
+	struct wl_lock_ctx *ctx = data;
+	if (!power_policy_on_activity(&ctx->power_policy))
+		return;
+	set_outputs_power(ctx, true);
+	render_all_outputs(ctx);
+	emit_event(ctx, "WOKEN\n");
+}
+
+static const struct ext_idle_notification_v1_listener idle_notif_listener = {
+	.idled = idle_idled,
+	.resumed = idle_resumed,
+};
+
 static void lock_locked(void *data, struct ext_session_lock_v1 *lock) {
 	(void)lock;
 	struct wl_lock_ctx *ctx = data;
 	ctx->locked = true;
+	if (power_policy_on_locked(&ctx->power_policy,
+							   ctx->idle_notifier != NULL && ctx->seat != NULL,
+							   ctx->output_power_mgr != NULL)) {
+		for (struct wl_lock_output *o = ctx->outputs; o; o = o->next)
+			attach_output_power(ctx, o);
+		if (!ctx->idle_notif) {
+			if (ctx->idle_notifier_ver >= 2) {
+				ctx->idle_notif =
+					ext_idle_notifier_v1_get_input_idle_notification(
+						ctx->idle_notifier, ctx->cfg.blank_timeout_ms,
+						ctx->seat);
+			} else {
+				ctx->idle_notif = ext_idle_notifier_v1_get_idle_notification(
+					ctx->idle_notifier, ctx->cfg.blank_timeout_ms, ctx->seat);
+			}
+			if (ctx->idle_notif) {
+				ext_idle_notification_v1_add_listener(
+					ctx->idle_notif, &idle_notif_listener, ctx);
+			}
+		}
+	}
 	if (ctx->cfg.ready_fd >= 0) {
 		const char msg[] = "LOCKED\n";
 		(void)write(ctx->cfg.ready_fd, msg, sizeof(msg) - 1);
@@ -418,6 +539,16 @@ static void reg_global(void *data, struct wl_registry *reg, uint32_t name,
 	} else if (strcmp(iface, ext_session_lock_manager_v1_interface.name) == 0) {
 		ctx->lock_mgr = wl_registry_bind(
 			reg, name, &ext_session_lock_manager_v1_interface, 1);
+	} else if (strcmp(iface, ext_idle_notifier_v1_interface.name) == 0 &&
+			   !ctx->idle_notifier) {
+		uint32_t v = (ver < 2) ? ver : 2;
+		ctx->idle_notifier_ver = v;
+		ctx->idle_notifier = wl_registry_bind(
+			reg, name, &ext_idle_notifier_v1_interface, v);
+	} else if (strcmp(iface, zwlr_output_power_manager_v1_interface.name) == 0 &&
+			   !ctx->output_power_mgr) {
+		ctx->output_power_mgr = wl_registry_bind(
+			reg, name, &zwlr_output_power_manager_v1_interface, 1);
 	} else if (strcmp(iface, wl_output_interface.name) == 0) {
 		struct wl_lock_output *out = calloc(1, sizeof(*out));
 		if (!out)
@@ -434,6 +565,12 @@ static void reg_global(void *data, struct wl_registry *reg, uint32_t name,
 		/* Hotplug while already locked: cover the new output immediately. */
 		if (ctx->lock)
 			create_lock_surface_for_output(ctx, out);
+		if (ctx->locked && ctx->power_policy.enabled) {
+			attach_output_power(ctx, out);
+			if (out->power && ctx->power_policy.blanked)
+				zwlr_output_power_v1_set_mode(out->power,
+											  ZWLR_OUTPUT_POWER_V1_MODE_OFF);
+		}
 	}
 }
 
@@ -468,6 +605,14 @@ static void cleanup_ctx(struct wl_lock_ctx *ctx) {
 		ctx->outputs = next;
 	}
 
+	if (ctx->idle_notif) {
+		ext_idle_notification_v1_destroy(ctx->idle_notif);
+		ctx->idle_notif = NULL;
+	}
+	if (ctx->idle_notifier)
+		ext_idle_notifier_v1_destroy(ctx->idle_notifier);
+	if (ctx->output_power_mgr)
+		zwlr_output_power_manager_v1_destroy(ctx->output_power_mgr);
 	if (ctx->lock) {
 		/* Never unlock here: unlock only happens explicitly on AUTH_OK. */
 		ext_session_lock_v1_destroy(ctx->lock);
@@ -504,6 +649,7 @@ int wl_lock_run(const struct wl_lock_config *cfg) {
 	ctx.cfg = *cfg;
 	ctx.exit_code = 1;
 	lock_state_init(&ctx.state);
+	power_policy_init(&ctx.power_policy, cfg->blank_timeout_ms);
 	auth_job_init(&ctx.auth);
 
 	ctx.xkb_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
@@ -614,6 +760,14 @@ int wl_lock_run(const struct wl_lock_config *cfg) {
 			int64_t now_ms = lock_monotonic_ms();
 			if (res == AUTH_OK) {
 				lock_state_on_auth_result(&ctx.state, true, now_ms);
+				if (ctx.idle_notif) {
+					ext_idle_notification_v1_destroy(ctx.idle_notif);
+					ctx.idle_notif = NULL;
+				}
+				if (power_policy_on_unlock(&ctx.power_policy)) {
+					set_outputs_power(&ctx, true);
+					emit_event(&ctx, "WOKEN\n");
+				}
 				if (ctx.lock && ctx.locked) {
 					ext_session_lock_v1_unlock_and_destroy(ctx.lock);
 					ctx.lock = NULL;
