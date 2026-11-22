@@ -1,11 +1,14 @@
 # Whole-seat control and handoff architecture
 
-Status: design validated by disposable VM experiment
+Status: whole-seat design validated by disposable VM experiment
 ([2026-11-22-seat-vm-experiment.md](../upstream/2026-11-22-seat-vm-experiment.md))
 and minimal C11 seat-controller prototype (`src/tam-hided.c`,
 `src/tam-hidectl.c`, `src/controller.c`, `src/vt.c`,
-`systemd/tam-hided.service`). No authentication, compositor adapter, or
-usable locker is implemented yet (`0.0.0`).
+`systemd/tam-hided.service`). Phase 1 (`0.1.0`) implements the Wayland
+`ext-session-lock-v1` locker (`src/tam-hide.c`, `src/wl_lock.c`,
+`src/render.c`, `src/lock_state.c`, `src/auth.c`, `src/auth_pam.c`) for
+`tam-pane` first; Phase 2 (`0.2.0`) wires it into `tam-hided` for whole-seat
+VT protection.
 
 ## Core invariant
 

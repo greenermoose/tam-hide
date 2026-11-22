@@ -3,26 +3,27 @@ WHATNOW
 What tam-hide is doing now and what comes next. Read this first; revise it
 at the end of every session (work/README-work).
 
-Updated: 2026-11-22, with W5
+Updated: 2026-11-22, with W6
 
 STATE
 
-  Version 0.0.0 on dev. No authentication or usable locker is implemented
-  yet. The minimal C11 seat-controller prototype (src/tam-hided.c,
-  src/tam-hidectl.c, src/controller.c, src/vt.c, systemd/tam-hided.service)
-  passes host unit tests (make test) and end-to-end disposable KVM tests
-  for startup auto-lock, VT_LOCKSWITCH, atomic handoff, socket peercred
-  isolation, and SIGKILL + systemd Restart=always recovery (W5).
+  Version 0.1.0 on dev. Phase 1 (`tam-hide` Wayland `ext-session-lock-v1`
+  locker for `tam-pane`) is implemented, passes all automated unit tests
+  (test_controller, test_lock_state, test_auth) and the 2-output headless
+  `tam-pane` integration test (make test-headless), and passed Fred's nested
+  `sandbox/demo-tam-pane` check (build/tam-hide SHA-256:
+  5832df123aba2bf6036ff14c80575c112a7723ebee20e2e863f51cba10ebfc34).
+
+  The existing VM-verified C11 VT seat-controller prototype (tam-hided,
+  tam-hidectl, controller.c, vt.c) remains intact and ready for Phase 2.
 
 NEXT
 
-  1. Define the compositor adapter interface (ext-session-lock-v1 lock
-     confirmation, hotplug coverage, blanking/wake) and verify Hyprland's
-     behavior in an isolated VM.
-  2. Wire compositor adapter confirmation into tam-hided before handoff
-     away from graphical sessions.
-  3. Design and implement the privileged salted-hash passcode store, rate
-     limiting, and multi-account/session picker.
+  1. Implement Phase 1b (0.1.1): output blanking and wake via
+     zwlr_output_power_manager_v1 and ext_idle_notifier_v1 under tam-pane.
+  2. Broaden to Phase 2 (0.2.0): wire tam-hide lock confirmation into
+     tam-hided before atomic VT handoff, and implement the privileged
+     Argon2id salted-hash passcode store and multi-account/session picker.
 
 WAITING FOR FRED
 
@@ -30,8 +31,8 @@ WAITING FOR FRED
 
 WATCH OUT
 
-  This project does not protect a workstation. No live login or seat
-  changes without explicit approval and a recorded rollback point.
-  Do not install systemd/tam-hided.service on a live host.
-  Do not rely on vlock --all or VT_PROCESS (both failed open on SIGKILL).
-  Graphical sessions must launch compositors via exec as session leader.
+  Phase 1 (0.1.0) locks the active tam-pane Wayland session only; it does
+  not yet engage kernel VT_LOCKSWITCH or protect other virtual terminals.
+  No live login or seat changes without explicit approval and a recorded
+  rollback point. Do not install systemd/tam-hided.service on a live host.
+  Never add auth-bypass CLI flags to build/tam-hide.

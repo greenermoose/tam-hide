@@ -1,0 +1,55 @@
+W6 PHASE 1 TAM-PANE WAYLAND LOCKER (0.1.0)
+
+Date: 2026-11-22
+AI harness: Antigravity CLI 1.5.14
+AI model: Gemini 4 Neon (Medium)
+Continues: W5
+
+GUIDANCE
+
+  Fred: "Start work on tam-hide. We want to use this in conjunction with
+  tam-pane first, then broaden the scope to handle VTs, too."
+  Approved plan: PAM for the current user first, minimal Cairo/Pango
+  non-disclosing UI, lock + auth + unlock + multi-output/hotplug +
+  fail-closed first (output blanking next, then VT/tam-hided integration).
+
+DONE
+
+  - Implemented the modular Phase 1 Wayland ext-session-lock-v1 locker
+    (build/tam-hide, version 0.1.0):
+    - src/lock_state.{h,c}: mlocked password buffer with explicit_bzero
+      wiping, UTF-8 codepoint editing, rate-limit backoff, non-disclosing
+      status strings.
+    - src/auth.{h,c} & src/auth_pam.c: async forked PAM worker over
+      SOCK_CLOEXEC/O_CLOEXEC pipes (never argv/env), PR_SET_DUMPABLE=0,
+      fail-closed on worker crash, automatic "tam-hide" -> "system-auth"
+      service fallback for unprivileged dev use.
+    - src/render.{h,c}: minimal Cairo/Pango dark slate cover with centered
+      passcode pill, dots, state-colored accent ring, and non-disclosing
+      status text; supports integer wl_output buffer scale.
+    - src/wl_lock.{h,c} & src/tam-hide.c: WAYLAND_SOCKET/WAYLAND_DISPLAY
+      ext-session-lock-v1 client with multi-output & live hotplug coverage,
+      xkbcommon keyboard input, poll() event loop, and fail-closed signal
+      handling (never unlocks on SIGTERM/SIGINT).
+  - Kept existing tam-hided/tam-hidectl VT prototype intact and passing.
+  - Added unit tests (tests/test_lock_state.c, tests/test_auth.c),
+    2-output headless tam-pane integration test (tests/test_wayland_lock.c,
+    tests/test_tam_pane_headless.sh), and nested demo
+    (sandbox/demo-tam-pane, sandbox/demo-tam-pane.lua).
+  - Bumped VERSION to 0.1.0 and updated README, ROADMAP.md,
+    plans/P1-lock.md, arch/security.md, arch/seat-control.md, and
+    work/WHATNOW.
+  - Verified with `make clean && make all test test-headless` and Fred's
+    nested `sandbox/demo-tam-pane` check (build/tam-hide SHA-256:
+    5832df123aba2bf6036ff14c80575c112a7723ebee20e2e863f51cba10ebfc34).
+
+FAILED
+
+  Nothing.
+
+HANDOFF
+
+  Proceed to Phase 1b (0.1.1: output blanking/wake via
+  zwlr_output_power_manager_v1 and ext_idle_notifier_v1 under tam-pane),
+  then Phase 2 (0.2.0: whole-seat VT integration with tam-hided +
+  Argon2id passcode store).

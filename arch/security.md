@@ -9,10 +9,14 @@ command as a lock. Document physical-access and recovery limitations.
 
 Keep authentication and seat control independent of compositor adapters.
 An adapter must report secure lock acquisition and loss, cover all outputs,
-and provide input and display-power handling. Investigate standard Wayland
-session-lock protocols and their failure semantics before selecting an
-implementation. tam-pane currently lacks the needed desktop protocols;
-do not claim support until verified against a running compositor.
+and provide input and display-power handling. `tam-pane` 0.2.0 provides
+`ext-session-lock-v1` (granted exclusively over `WAYLAND_SOCKET` via `tp.lock`),
+`ext-idle-notify-v1`, and `zwlr-output-power-management-v1`.
+
+Phase 1 (`0.1.0`) verifies single-session Wayland locking under `tam-pane`
+with PAM authentication for the current user; it does **not** yet engage
+`VT_LOCKSWITCH` or protect other virtual terminals. Whole-seat VT protection
+and multi-account passcode selection land in Phase 2 (`0.2.0`).
 
 Passcodes select accounts, including all accounts sharing a passcode.
 Store only salted slow hashes in a privileged store. Passcodes must not

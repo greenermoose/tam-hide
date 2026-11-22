@@ -1,0 +1,58 @@
+#!/bin/sh
+# Launch tam-pane nested under the current Wayland session to verify
+# build/tam-hide with real PAM authentication:
+#   - Meta+L launches build/tam-hide via tp.lock (WAYLAND_SOCKET)
+#   - Wrong password shows non-disclosing feedback and keeps session locked
+#   - Real Linux password unlocks cleanly and restores the guide window
+set -eu
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+TAM_PANE_ROOT="$ROOT/../tam-pane"
+LOCKER="$ROOT/build/tam-hide"
+
+want=$(tr -d '[:space:]' < "$ROOT/VERSION")
+have=$("$LOCKER" -v 2>/dev/null | awk '{print $2}') || true
+if [ "$have" != "$want" ]; then
+	echo "build/tam-hide is '${have:-missing}', VERSION is $want: run make first" >&2
+	exit 1
+fi
+if [ ! -x "$TAM_PANE_ROOT/tools/nested-input" ]; then
+	echo "missing $TAM_PANE_ROOT/tools/nested-input (build tam-pane first)" >&2
+	exit 1
+fi
+
+TMPDIR_DEMO=$(mktemp -d "${TMPDIR:-/tmp}/tam-hide-demo.XXXXXX")
+trap 'rm -rf "$TMPDIR_DEMO"' EXIT INT TERM
+
+CFG="$TMPDIR_DEMO/init.lua"
+GUIDE="$TMPDIR_DEMO/guide"
+{
+	printf 'local GUIDE = "%s"\n' "$GUIDE"
+	printf 'local TAM_HIDE = "%s"\n' "$LOCKER"
+	cat "$ROOT/sandbox/demo-tam-pane.lua"
+} >"$CFG"
+
+cat >"$GUIDE" <<'GUIDE'
+=== tam-hide 0.1.0 + tam-pane nested demo ===
+
+ 1. Press Meta+L to lock the nested session via tp.lock{".../tam-hide"}.
+    The nested window should turn dark slate with a centered pill and
+    no username or session disclosure.
+ 2. While locked, press Meta+Return: no terminal should open.
+ 3. Type a wrong password and press Enter: dots appear, then "Verifying..."
+    and "Incorrect", and the session stays locked.
+ 4. Type your real Linux password and press Enter: the session unlocks
+    and this guide window returns.
+ 5. Press Meta+Shift+E to quit.
+
+GUIDE
+
+"$TAM_PANE_ROOT/tools/nested-input" -c "$CFG" -s '' || true
+
+echo
+printf 'Did tam-hide lock cleanly, reject a wrong password, and unlock with your real password? [y/n] '
+read -r answer
+case $answer in
+y | Y | yes) echo "PASS: tam-hide + tam-pane nested check verified" ;;
+*) echo "FAIL: tam-hide + tam-pane nested check failed"; exit 1 ;;
+esac
