@@ -3,24 +3,24 @@ WHATNOW
 What tam-hide is doing now and what comes next. Read this first; revise it
 at the end of every session (work/README-work).
 
-Updated: 2026-11-22, with W4
+Updated: 2026-11-22, with W5
 
 STATE
 
-  Version 0.0.0 on dev. No locker is implemented yet. The disposable KVM
-  whole-seat feasibility experiment (T1-T7) is complete (W4), recorded in
-  upstream/2026-11-22-seat-vm-experiment.md, and the resolved seat-control
-  and crash-recovery design is in arch/seat-control.md.
+  Version 0.0.0 on dev. No authentication or usable locker is implemented
+  yet. The minimal C11 seat-controller prototype (src/tam-hided.c,
+  src/tam-hidectl.c, src/controller.c, src/vt.c, systemd/tam-hided.service)
+  passes host unit tests (make test) and end-to-end disposable KVM tests
+  for startup auto-lock, VT_LOCKSWITCH, atomic handoff, socket peercred
+  isolation, and SIGKILL + systemd Restart=always recovery (W5).
 
 NEXT
 
-  1. Prototype the minimal privileged seat controller in an isolated VM
-     (dedicated lock VT, persistent VT_LOCKSWITCH, atomic VT handoff, and
-     systemd Restart=always recovery) per arch/seat-control.md and
-     plans/P1-lock.md.
-  2. Define the compositor adapter interface and verify Hyprland's
-     ext-session-lock-v1, crash, hotplug, and blanking/wake behavior in
-     the disposable VM.
+  1. Define the compositor adapter interface (ext-session-lock-v1 lock
+     confirmation, hotplug coverage, blanking/wake) and verify Hyprland's
+     behavior in an isolated VM.
+  2. Wire compositor adapter confirmation into tam-hided before handoff
+     away from graphical sessions.
   3. Design and implement the privileged salted-hash passcode store, rate
      limiting, and multi-account/session picker.
 
@@ -32,5 +32,6 @@ WATCH OUT
 
   This project does not protect a workstation. No live login or seat
   changes without explicit approval and a recorded rollback point.
+  Do not install systemd/tam-hided.service on a live host.
   Do not rely on vlock --all or VT_PROCESS (both failed open on SIGKILL).
   Graphical sessions must launch compositors via exec as session leader.

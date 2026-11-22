@@ -1,0 +1,39 @@
+W5 P1 SEAT-CONTROLLER PROTOTYPE
+
+Date: 2026-11-22
+AI harness: Antigravity CLI 1.5.14
+AI model: Gemini 4 Neon (Medium)
+Continues: W4
+
+GUIDANCE
+
+  Fred: "I pushed. I've reviewed seat-control.md and approve. Proceed
+  with the P1 seat-controller prototype."
+
+DONE
+
+  - Implemented the zero-dependency C11 seat-controller prototype:
+    src/vt.{h,c} (VT_LOCKSWITCH + fail-closed atomic VT handoff),
+    src/controller.{h,c} (LOCKED/ACTIVE_USER state machine, startup/crash
+    re-lock, 0600 + SO_PEERCRED Unix socket IPC), src/tam-hided.c,
+    src/tam-hidectl.c, systemd/tam-hided.service, Makefile, and
+    tests/test_controller.c.
+  - Built with -std=c11 -Wall -Wextra -Werror and passed host unit tests
+    (make all test).
+  - Verified end-to-end in a disposable KVM Arch live guest: startup
+    auto-lock onto tty6, QMP Ctrl+Alt+F2 blocking, non-root permission
+    denial on /run/tam-hide/control.sock, atomic handoff to tty3
+    (0.50-22.20 ms) with persistent VT_LOCKSWITCH, and SIGKILL crash
+    recovery (fail-closed while dead, systemd Restart=always returning
+    the seat to locked tty6).
+  - Updated arch/seat-control.md, plans/P1-lock.md, and work/WHATNOW.
+
+FAILED
+
+  Nothing.
+
+HANDOFF
+
+  Define the compositor adapter interface and verify Hyprland's
+  ext-session-lock-v1, crash, hotplug, and blanking/wake behavior in an
+  isolated VM, then integrate it with tam-hided.
