@@ -1,6 +1,6 @@
 # P1: Session and whole-seat lock
 
-Status: Phase 1 (`0.1.0`) and Phase 1b (`0.1.1`) implemented and verified for `tam-pane` (`dev`).
+Status: Phase 1 (`0.1.0`) and Phase 1b (`0.1.1`) implemented and verified for `tam-pane` (`dev`), including Fred's nested `sandbox/demo-tam-pane` blank/wake check.
 
 ## Completed groundwork
 

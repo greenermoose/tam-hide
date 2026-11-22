@@ -41,8 +41,9 @@ DONE
     --blank-after 10 in nested tam-pane.
   - Bumped VERSION to 0.1.1 and updated README, UPSTREAM.md, plans/P1-lock.md,
     and work/WHATNOW.
-  - Verified with `make clean && make all test test-headless`
-    (build/tam-hide SHA-256:
+  - Verified with `make clean && make all test test-headless` and Fred's
+    nested `sandbox/demo-tam-pane` check (10s idle blank, wake on input,
+    PAM unlock; build/tam-hide SHA-256:
     def909abc6ba4774795b47d9f203b11d023951d0df96647dc18d549a029cf273).
 
 FAILED
@@ -51,8 +52,6 @@ FAILED
 
 HANDOFF
 
-  1. Optionally run Fred's nested `sandbox/demo-tam-pane` check to visually
-     confirm 10s idle blanking and wake in nested tam-pane.
-  2. Proceed to Phase 2 (0.2.0): wire tam-hide lock confirmation into
-     tam-hided before atomic VT handoff, and implement the privileged
-     Argon2id salted-hash passcode store and multi-account/session picker.
+  Proceed to Phase 2 (0.2.0): wire tam-hide lock confirmation into
+  tam-hided before atomic VT handoff, and implement the privileged
+  Argon2id salted-hash passcode store and multi-account/session picker.
