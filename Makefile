@@ -11,6 +11,8 @@ LDFLAGS ?=
 WL_PKGS := wayland-client xkbcommon cairo pangocairo
 WL_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(WL_PKGS))
 WL_LIBS := $(shell $(PKG_CONFIG) --libs $(WL_PKGS)) -lm
+ARGON2_CFLAGS := $(shell $(PKG_CONFIG) --cflags libargon2)
+ARGON2_LIBS := $(shell $(PKG_CONFIG) --libs libargon2)
 PAM_LIBS := -lpam
 
 WAYLAND_PROTOCOLS_DIR := $(shell $(PKG_CONFIG) --variable=pkgdatadir wayland-protocols)
@@ -30,8 +32,8 @@ OUTPUT_POWER_C := $(PROTO_DIR)/wlr-output-power-management-unstable-v1-protocol.
 PROTO_HDRS := $(SESSION_LOCK_H) $(IDLE_NOTIFY_H) $(OUTPUT_POWER_H)
 PROTO_SRCS := $(SESSION_LOCK_C) $(IDLE_NOTIFY_C) $(OUTPUT_POWER_C)
 
-LOCK_CORE_SRCS := src/wl_lock.c src/render.c src/lock_state.c src/power_policy.c src/auth.c $(PROTO_SRCS)
-LOCK_CORE_HDRS := src/wl_lock.h src/render.h src/lock_state.h src/power_policy.h src/auth.h $(PROTO_HDRS)
+LOCK_CORE_SRCS := src/wl_lock.c src/render.c src/lock_state.c src/power_policy.c src/auth.c src/auth_controller.c $(PROTO_SRCS)
+LOCK_CORE_HDRS := src/wl_lock.h src/render.h src/lock_state.h src/power_policy.h src/auth.h src/auth_controller.h $(PROTO_HDRS)
 
 .PHONY: all test test-headless install clean
 
@@ -62,14 +64,21 @@ $(BUILD)/tam-hide: src/tam-hide.c src/auth_pam.c $(LOCK_CORE_SRCS) $(LOCK_CORE_H
 	$(CC) $(CFLAGS) -Isrc -I$(PROTO_DIR) $(WL_CFLAGS) -o $@ \
 		src/tam-hide.c src/auth_pam.c $(LOCK_CORE_SRCS) $(LDFLAGS) $(WL_LIBS) $(PAM_LIBS)
 
-$(BUILD)/tam-hided: src/tam-hided.c src/controller.c src/vt.c src/controller.h src/vt.h | $(BUILD)
-	$(CC) $(CFLAGS) -o $@ src/tam-hided.c src/controller.c src/vt.c $(LDFLAGS)
+$(BUILD)/tam-hided: src/tam-hided.c src/controller.c src/vt.c src/passcode_store.c src/controller.h src/vt.h src/passcode_store.h | $(BUILD)
+	$(CC) $(CFLAGS) -Isrc $(ARGON2_CFLAGS) -o $@ \
+		src/tam-hided.c src/controller.c src/vt.c src/passcode_store.c $(LDFLAGS) $(ARGON2_LIBS)
 
-$(BUILD)/tam-hidectl: src/tam-hidectl.c | $(BUILD)
-	$(CC) $(CFLAGS) -o $@ src/tam-hidectl.c $(LDFLAGS)
+$(BUILD)/tam-hidectl: src/tam-hidectl.c src/passcode_store.c src/passcode_store.h | $(BUILD)
+	$(CC) $(CFLAGS) -Isrc $(ARGON2_CFLAGS) -o $@ \
+		src/tam-hidectl.c src/passcode_store.c $(LDFLAGS) $(ARGON2_LIBS)
 
-$(BUILD)/test_controller: tests/test_controller.c src/controller.c src/vt.c src/controller.h src/vt.h | $(BUILD)
-	$(CC) $(CFLAGS) -Isrc -o $@ tests/test_controller.c src/controller.c src/vt.c $(LDFLAGS)
+$(BUILD)/test_passcode_store: tests/test_passcode_store.c src/passcode_store.c src/passcode_store.h | $(BUILD)
+	$(CC) $(CFLAGS) -Isrc $(ARGON2_CFLAGS) -o $@ \
+		tests/test_passcode_store.c src/passcode_store.c $(LDFLAGS) $(ARGON2_LIBS)
+
+$(BUILD)/test_controller: tests/test_controller.c src/controller.c src/vt.c src/passcode_store.c src/auth_controller.c src/controller.h src/vt.h src/passcode_store.h src/auth_controller.h | $(BUILD)
+	$(CC) $(CFLAGS) -Isrc $(ARGON2_CFLAGS) -o $@ \
+		tests/test_controller.c src/controller.c src/vt.c src/passcode_store.c src/auth_controller.c $(LDFLAGS) $(ARGON2_LIBS)
 
 $(BUILD)/test_lock_state: tests/test_lock_state.c src/lock_state.c src/lock_state.h | $(BUILD)
 	$(CC) $(CFLAGS) -Isrc -o $@ tests/test_lock_state.c src/lock_state.c $(LDFLAGS)
@@ -84,13 +93,14 @@ $(BUILD)/test_wayland_lock: tests/test_wayland_lock.c $(LOCK_CORE_SRCS) $(LOCK_C
 	$(CC) $(CFLAGS) -Isrc -I$(PROTO_DIR) $(WL_CFLAGS) -o $@ \
 		tests/test_wayland_lock.c $(LOCK_CORE_SRCS) $(LDFLAGS) $(WL_LIBS)
 
-test: $(BUILD)/test_controller $(BUILD)/test_lock_state $(BUILD)/test_power_policy $(BUILD)/test_auth $(BUILD)/test_wayland_lock
+test: $(BUILD)/test_passcode_store $(BUILD)/test_controller $(BUILD)/test_lock_state $(BUILD)/test_power_policy $(BUILD)/test_auth $(BUILD)/test_wayland_lock
+	./$(BUILD)/test_passcode_store
 	./$(BUILD)/test_controller
 	./$(BUILD)/test_lock_state
 	./$(BUILD)/test_power_policy
 	./$(BUILD)/test_auth
 
-test-headless: $(BUILD)/test_wayland_lock
+test-headless: $(BUILD)/test_wayland_lock $(BUILD)/tam-hide
 	./tests/test_tam_pane_headless.sh
 
 install: $(BUILD)/tam-hide

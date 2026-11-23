@@ -1,0 +1,60 @@
+W8 PHASE 2A LOCK CONFIRMATION, ARGON2ID STORE, AND MULTI-ACCOUNT PICKER (0.2.0)
+
+Date: 2026-11-23
+AI harness: Antigravity CLI 1.5.14
+AI model: Gemini 4 Neon (Medium)
+Continues: W7
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice for tam-hide" -> approved Phase 2a plan
+  with active-session SO_PEERCRED gating on auth.sock, 128-bit single-use PICK
+  tokens, 0755/0600/0660 socket permissions, and Argon2id m=65536, t=2, p=1
+  defaults with safe tuning floors.
+
+DONE
+
+  - Implemented privileged Argon2id passcode store (`src/passcode_store.{h,c}`):
+    - Native `libargon2` (`m=65536` KiB, `t=2`, `p=1`, 16-byte `getrandom()`
+      salt, 32-byte hash) with production floors (`m >= 19456`, `t >= 2`,
+      `p = 1`), `0600` atomic temp+fsync+rename saves, `$argon2id$`-only load
+      that rejects group/world-accessible files, and constant-sweep matching
+      across all accounts so duplicate passcodes return every match.
+  - Extended seat controller (`src/controller.{h,c}`, `src/tam-hided.c`,
+    `src/tam-hidectl.c`, `systemd/tam-hided.service`):
+    - Session registry (`REGISTER_SESSION`, `UNREGISTER_SESSION`, `SESSIONS`)
+      and compositor lock-confirmation gate refusing `LOCK`/`HANDOFF` away
+      from an unconfirmed active graphical session until `CONFIRM_LOCK <vt>`.
+    - Optional privilege-separated `--auth-socket` restricted to
+      `CONFIRM_LOCK`, `AUTH`, `SELECT`, and `CANCEL`, gated by active-session
+      `SO_PEERCRED`, server-side exponential lockout, and single-use 128-bit
+      `PICK` tokens.
+    - Added `tam-hidectl passcode-set [--argon2-m KiB] [--argon2-t ITERS]
+      <USER> <UID>` (stdin/TTY no-echo, never argv), `passcode-del`,
+      `passcode-list`, and session/lock-confirmation IPC commands.
+  - Extended Wayland locker (`src/auth.{h,c}`, `src/auth_controller.{h,c}`,
+    `src/lock_state.{h,c}`, `src/render.c`, `src/wl_lock.{h,c}`,
+    `src/tam-hide.c`):
+    - Added `--ready-fd FD`, `--auth-socket PATH`, and `--session-vt N`
+      (preserving standalone Phase 1 PAM mode when `--auth-socket` is omitted).
+    - Added post-auth `LOCK_UI_PICKER` state, Cairo/Pango selection card,
+      keyboard navigation (`Up`/`Down`/`j`/`k`/`1`-`9`/`Enter`/`Esc`), and
+      picker memory wipe on cancel/blank/exit.
+  - Added `tests/test_passcode_store.c` and extended `tests/test_controller.c`,
+    `tests/test_lock_state.c`, `tests/test_auth.c`, and
+    `tests/test_tam_pane_headless.sh` (including production `tam-hide
+    --ready-fd` under 2-output headless `tam-pane`).
+  - Bumped `VERSION` to `0.2.0` and updated `Makefile`, `README`,
+    `plans/P1-lock.md`, and `work/WHATNOW`.
+  - Verified with `make clean && make all test test-headless` and
+    `tam-hidectl` passcode CLI smoke test.
+
+FAILED
+
+  Nothing.
+
+HANDOFF
+
+  Proceed to Phase 2b: end-to-end verification of `tam-hided` + `tam-hide` +
+  Argon2id passcode store + lock-confirmation gate + multi-account VT handoff
+  in a disposable KVM/QEMU VM with real `VT_LOCKSWITCH`.

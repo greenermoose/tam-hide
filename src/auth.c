@@ -50,8 +50,19 @@ void auth_job_init(struct auth_job *job) {
 	job->result_fd = -1;
 }
 
-int auth_start(struct auth_job *job, auth_verify_fn verify_fn, void *ctx,
-			   char *password, size_t len) {
+struct simple_wrap {
+	auth_verify_fn fn;
+	void *ctx;
+};
+
+static void simple_verify_adapter(const char *password, size_t len, void *vctx,
+								  struct auth_result *out) {
+	struct simple_wrap *w = vctx;
+	out->outcome = w->fn(password, len, w->ctx);
+}
+
+int auth_start_ex(struct auth_job *job, auth_verify_ex_fn verify_fn, void *ctx,
+				  char *password, size_t len) {
 	if (!job || !verify_fn || !password || len == 0 ||
 		len > TAM_HIDE_MAX_PASS_BYTES) {
 		if (password && len > 0)
@@ -96,7 +107,10 @@ int auth_start(struct auth_job *job, auth_verify_fn verify_fn, void *ctx,
 		close(out_pipe[0]);
 		(void)prctl(PR_SET_DUMPABLE, 0, 0, 0, 0);
 
-		uint8_t outcome = (uint8_t)AUTH_ERROR;
+		struct auth_result res;
+		memset(&res, 0, sizeof(res));
+		res.outcome = AUTH_ERROR;
+
 		uint32_t plen = 0;
 		char child_buf[TAM_HIDE_MAX_PASS_BYTES + 1];
 		memset(child_buf, 0, sizeof(child_buf));
@@ -106,13 +120,14 @@ int auth_start(struct auth_job *job, auth_verify_fn verify_fn, void *ctx,
 			read_all(in_pipe[0], child_buf, plen) == 0) {
 			child_buf[plen] = '\0';
 			close(in_pipe[0]);
-			outcome = (uint8_t)verify_fn(child_buf, plen, ctx);
+			verify_fn(child_buf, plen, ctx, &res);
 		} else {
 			close(in_pipe[0]);
 		}
 
 		explicit_bzero(child_buf, sizeof(child_buf));
-		(void)write_all(out_pipe[1], &outcome, sizeof(outcome));
+		(void)write_all(out_pipe[1], &res, sizeof(res));
+		explicit_bzero(&res, sizeof(res));
 		close(out_pipe[1]);
 		_exit(0);
 	}
@@ -141,12 +156,29 @@ int auth_start(struct auth_job *job, auth_verify_fn verify_fn, void *ctx,
 	return 0;
 }
 
-enum auth_outcome auth_finish(struct auth_job *job) {
-	if (!job || job->pid <= 0 || job->result_fd < 0)
-		return AUTH_ERROR;
+int auth_start(struct auth_job *job, auth_verify_fn verify_fn, void *ctx,
+			   char *password, size_t len) {
+	if (!verify_fn) {
+		if (password && len > 0)
+			explicit_bzero(password, len);
+		return -EINVAL;
+	}
+	struct simple_wrap wrap = { .fn = verify_fn, .ctx = ctx };
+	return auth_start_ex(job, simple_verify_adapter, &wrap, password, len);
+}
 
-	uint8_t byte = (uint8_t)AUTH_ERROR;
-	int rrc = read_all(job->result_fd, &byte, sizeof(byte));
+void auth_finish_ex(struct auth_job *job, struct auth_result *out) {
+	if (!out)
+		return;
+	memset(out, 0, sizeof(*out));
+	out->outcome = AUTH_ERROR;
+
+	if (!job || job->pid <= 0 || job->result_fd < 0)
+		return;
+
+	struct auth_result tmp;
+	memset(&tmp, 0, sizeof(tmp));
+	int rrc = read_all(job->result_fd, &tmp, sizeof(tmp));
 	close(job->result_fd);
 	job->result_fd = -1;
 
@@ -156,13 +188,23 @@ enum auth_outcome auth_finish(struct auth_job *job) {
 	job->pid = -1;
 
 	if (rrc < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0)
-		return AUTH_ERROR;
+		return;
 
-	if (byte == (uint8_t)AUTH_OK)
-		return AUTH_OK;
-	if (byte == (uint8_t)AUTH_DENIED)
-		return AUTH_DENIED;
-	return AUTH_ERROR;
+	if (tmp.outcome == AUTH_OK || tmp.outcome == AUTH_DENIED ||
+		tmp.outcome == AUTH_PICK || tmp.outcome == AUTH_LOCKOUT) {
+		if (tmp.pick_count > TAM_HIDE_MAX_PICK_ITEMS)
+			tmp.pick_count = TAM_HIDE_MAX_PICK_ITEMS;
+		*out = tmp;
+	}
+	explicit_bzero(&tmp, sizeof(tmp));
+}
+
+enum auth_outcome auth_finish(struct auth_job *job) {
+	struct auth_result res;
+	auth_finish_ex(job, &res);
+	enum auth_outcome outcome = res.outcome;
+	explicit_bzero(&res, sizeof(res));
+	return outcome;
 }
 
 void auth_cancel(struct auth_job *job) {

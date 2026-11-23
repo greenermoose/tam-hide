@@ -81,7 +81,7 @@ static void test_max_length_and_verify_wipe(void) {
 static void test_rate_limit_and_status_text(void) {
 	struct lock_state st;
 	lock_state_init(&st);
-	char text[64];
+	char text[96];
 
 	/* Failure 1 & 2 -> LOCK_UI_FAILED (no lockout yet). */
 	lock_state_on_auth_result(&st, false, 1000);
@@ -114,10 +114,62 @@ static void test_rate_limit_and_status_text(void) {
 	lock_state_on_auth_result(&st, false, 30000);
 	assert(lock_state_lockout_remaining_sec(&st, 30000) == 10);
 
+	/* Server-enforced lockout helper. */
+	lock_state_on_lockout(&st, 5, 50000);
+	assert(st.ui_state == LOCK_UI_LOCKOUT);
+	assert(lock_state_lockout_remaining_sec(&st, 50000) == 5);
+
 	/* Success resets fail_count. */
-	lock_state_on_auth_result(&st, true, 45000);
+	lock_state_on_auth_result(&st, true, 60000);
 	assert(st.fail_count == 0);
 	assert(st.ui_state == LOCK_UI_IDLE);
+
+	lock_state_destroy(&st);
+}
+
+static void test_picker_state_and_wipe(void) {
+	struct lock_state st;
+	lock_state_init(&st);
+
+	struct lock_pick_item items[2] = {
+		{ .index = 0, .uid = 1000, .vt_nr = 2, .username = "alice", .kind = "graphical" },
+		{ .index = 1, .uid = 1001, .vt_nr = 3, .username = "bob", .kind = "console" },
+	};
+	assert(lock_state_enter_picker(&st, "0123456789abcdef0123456789abcdef",
+								   items, 2));
+	assert(st.ui_state == LOCK_UI_PICKER);
+	assert(st.pick_count == 2);
+	assert(st.pick_selected == 0);
+	assert(!lock_state_append_utf8(&st, "a", 1, 1000));
+
+	/* Move down and wrap around. */
+	assert(lock_state_picker_move(&st, 1));
+	assert(lock_state_picker_current(&st)->uid == 1001);
+	assert(lock_state_picker_move(&st, 1));
+	assert(lock_state_picker_current(&st)->uid == 1000);
+	assert(lock_state_picker_move(&st, -1));
+	assert(lock_state_picker_current(&st)->uid == 1001);
+
+	/* Direct digit selection. */
+	assert(lock_state_picker_select_digit(&st, 1));
+	assert(lock_state_picker_current(&st)->uid == 1000);
+	assert(!lock_state_picker_select_digit(&st, 9));
+
+	/* Cancel wipes picker items and token. */
+	assert(lock_state_picker_cancel(&st));
+	assert(st.ui_state == LOCK_UI_IDLE);
+	assert(st.pick_count == 0);
+	assert(st.pick_token[0] == '\0');
+	assert(st.pick_items[0].username[0] == '\0');
+
+	/* Idle blank (lock_state_clear) also wipes picker items. */
+	assert(lock_state_enter_picker(&st, "fedcba9876543210fedcba9876543210",
+								   items, 2));
+	assert(lock_state_clear(&st, 2000));
+	assert(st.ui_state == LOCK_UI_IDLE);
+	assert(st.pick_count == 0);
+	assert(st.pick_token[0] == '\0');
+	assert(st.pick_items[0].username[0] == '\0');
 
 	lock_state_destroy(&st);
 }
@@ -126,6 +178,7 @@ int main(void) {
 	test_utf8_editing_and_wipe();
 	test_max_length_and_verify_wipe();
 	test_rate_limit_and_status_text();
+	test_picker_state_and_wipe();
 	printf("test_lock_state: all tests passed\n");
 	return 0;
 }

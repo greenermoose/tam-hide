@@ -118,6 +118,26 @@ static void set_outputs_power(struct wl_lock_ctx *ctx, bool on) {
 	}
 }
 
+static void complete_unlock(struct wl_lock_ctx *ctx, int64_t now_ms) {
+	lock_state_on_auth_result(&ctx->state, true, now_ms);
+	if (ctx->idle_notif) {
+		ext_idle_notification_v1_destroy(ctx->idle_notif);
+		ctx->idle_notif = NULL;
+	}
+	if (power_policy_on_unlock(&ctx->power_policy)) {
+		set_outputs_power(ctx, true);
+		emit_event(ctx, "WOKEN\n");
+	}
+	if (ctx->lock && ctx->locked) {
+		ext_session_lock_v1_unlock_and_destroy(ctx->lock);
+		ctx->lock = NULL;
+		wl_display_roundtrip(ctx->display);
+	}
+	ctx->unlocked = true;
+	ctx->exit_code = 0;
+	ctx->done = true;
+}
+
 static void buffer_release(void *data, struct wl_buffer *buffer) {
 	(void)data;
 	wl_buffer_destroy(buffer);
@@ -298,12 +318,17 @@ static void submit_password(struct wl_lock_ctx *ctx, int64_t now_ms) {
 	if (!lock_state_begin_verify(&ctx->state, pass, sizeof(pass), &plen))
 		return;
 
-	int rc = auth_start(&ctx->auth, ctx->cfg.verify_fn, ctx->cfg.verify_ctx,
+	int rc;
+	if (ctx->cfg.verify_ex_fn) {
+		rc = auth_start_ex(&ctx->auth, ctx->cfg.verify_ex_fn,
+						   ctx->cfg.verify_ctx, pass, plen);
+	} else {
+		rc = auth_start(&ctx->auth, ctx->cfg.verify_fn, ctx->cfg.verify_ctx,
 						pass, plen);
-	explicit_bzero(pass, sizeof(pass));
-	if (rc < 0) {
-		lock_state_on_auth_result(&ctx->state, false, now_ms);
 	}
+	explicit_bzero(pass, sizeof(pass));
+	if (rc < 0)
+		lock_state_on_auth_result(&ctx->state, false, now_ms);
 	render_all_outputs(ctx);
 }
 
@@ -367,6 +392,50 @@ static void kb_key(void *data, struct wl_keyboard *kb, uint32_t serial,
 	int64_t now_ms = lock_monotonic_ms();
 	uint32_t keycode = key + 8;
 	xkb_keysym_t sym = xkb_state_key_get_one_sym(ctx->xkb_state, keycode);
+
+	if (ctx->state.ui_state == LOCK_UI_PICKER) {
+		if (sym == XKB_KEY_Escape) {
+			if (ctx->cfg.cancel_fn)
+				ctx->cfg.cancel_fn(ctx->cfg.verify_ctx);
+			if (lock_state_picker_cancel(&ctx->state))
+				render_all_outputs(ctx);
+			emit_event(ctx, "PICK_CANCELLED\n");
+			return;
+		}
+		if (sym == XKB_KEY_Up || sym == XKB_KEY_k) {
+			if (lock_state_picker_move(&ctx->state, -1))
+				render_all_outputs(ctx);
+			return;
+		}
+		if (sym == XKB_KEY_Down || sym == XKB_KEY_j) {
+			if (lock_state_picker_move(&ctx->state, 1))
+				render_all_outputs(ctx);
+			return;
+		}
+		if (sym >= XKB_KEY_1 && sym <= XKB_KEY_9) {
+			if (lock_state_picker_select_digit(&ctx->state,
+											   (int)(sym - XKB_KEY_0)))
+				render_all_outputs(ctx);
+			return;
+		}
+		if (sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter) {
+			const struct lock_pick_item *cur =
+				lock_state_picker_current(&ctx->state);
+			if (cur && ctx->cfg.select_fn) {
+				enum auth_outcome sel = ctx->cfg.select_fn(
+					ctx->state.pick_token, cur->index, ctx->cfg.verify_ctx);
+				if (sel == AUTH_OK) {
+					emit_event(ctx, "PICK_SELECTED\n");
+					complete_unlock(ctx, now_ms);
+					return;
+				}
+			}
+			lock_state_on_auth_result(&ctx->state, false, now_ms);
+			render_all_outputs(ctx);
+			return;
+		}
+		return;
+	}
 
 	bool ctrl = xkb_state_mod_name_is_active(
 		ctx->xkb_state, XKB_MOD_NAME_CTRL, XKB_STATE_MODS_EFFECTIVE) > 0;
@@ -458,6 +527,8 @@ static void idle_idled(void *data, struct ext_idle_notification_v1 *notif) {
 	bool verifying = (ctx->state.ui_state == LOCK_UI_VERIFYING);
 	if (!power_policy_on_idle(&ctx->power_policy, verifying))
 		return;
+	if (ctx->state.ui_state == LOCK_UI_PICKER && ctx->cfg.cancel_fn)
+		ctx->cfg.cancel_fn(ctx->cfg.verify_ctx);
 	int64_t now_ms = lock_monotonic_ms();
 	(void)lock_state_clear(&ctx->state, now_ms);
 	render_all_outputs(ctx);
@@ -505,6 +576,8 @@ static void lock_locked(void *data, struct ext_session_lock_v1 *lock) {
 			}
 		}
 	}
+	if (ctx->cfg.on_locked_fn)
+		ctx->cfg.on_locked_fn(ctx->cfg.verify_ctx);
 	if (ctx->cfg.ready_fd >= 0) {
 		const char msg[] = "LOCKED\n";
 		(void)write(ctx->cfg.ready_fd, msg, sizeof(msg) - 1);
@@ -642,7 +715,7 @@ static void cleanup_ctx(struct wl_lock_ctx *ctx) {
 }
 
 int wl_lock_run(const struct wl_lock_config *cfg) {
-	if (!cfg || !cfg->verify_fn)
+	if (!cfg || (!cfg->verify_fn && !cfg->verify_ex_fn))
 		return 1;
 
 	struct wl_lock_ctx ctx;
@@ -757,29 +830,24 @@ int wl_lock_run(const struct wl_lock_config *cfg) {
 			break;
 
 		if (nfds == 2 && (fds[1].revents & (POLLIN | POLLHUP | POLLERR))) {
-			enum auth_outcome res = auth_finish(&ctx.auth);
+			struct auth_result res;
+			auth_finish_ex(&ctx.auth, &res);
 			int64_t now_ms = lock_monotonic_ms();
-			if (res == AUTH_OK) {
-				lock_state_on_auth_result(&ctx.state, true, now_ms);
-				if (ctx.idle_notif) {
-					ext_idle_notification_v1_destroy(ctx.idle_notif);
-					ctx.idle_notif = NULL;
-				}
-				if (power_policy_on_unlock(&ctx.power_policy)) {
-					set_outputs_power(&ctx, true);
-					emit_event(&ctx, "WOKEN\n");
-				}
-				if (ctx.lock && ctx.locked) {
-					ext_session_lock_v1_unlock_and_destroy(ctx.lock);
-					ctx.lock = NULL;
-					wl_display_roundtrip(ctx.display);
-				}
-				ctx.unlocked = true;
-				ctx.exit_code = 0;
-				ctx.done = true;
+			if (res.outcome == AUTH_OK) {
+				explicit_bzero(&res, sizeof(res));
+				complete_unlock(&ctx, now_ms);
 				break;
 			}
-			lock_state_on_auth_result(&ctx.state, false, now_ms);
+			if (res.outcome == AUTH_PICK &&
+				lock_state_enter_picker(&ctx.state, res.pick_token,
+										res.pick_items, res.pick_count)) {
+				emit_event(&ctx, "PICKER\n");
+			} else if (res.outcome == AUTH_LOCKOUT) {
+				lock_state_on_lockout(&ctx.state, res.lockout_sec, now_ms);
+			} else {
+				lock_state_on_auth_result(&ctx.state, false, now_ms);
+			}
+			explicit_bzero(&res, sizeof(res));
 			render_all_outputs(&ctx);
 		}
 

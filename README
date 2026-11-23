@@ -3,18 +3,30 @@ TAM-HIDE - WORKSTATION PRIVACY FOR TAMLINUX
 tam-hide locks a Tamlinux workstation cleanly and without disclosing account
 or session details.
 
-Version 0.1.1 implements the Phase 1/1b Wayland session locker (`tam-hide`) for
-use with `tam-pane` (0.2.0+) via `ext-session-lock-v1`, PAM authentication for
-the current user, and idle output blanking/wake via `ext_idle_notifier_v1` and
-`zwlr_output_power_manager_v1` (`--blank-after SECONDS`, default 30). Whole-seat
-VT locking (`tam-hided` + `VT_LOCKSWITCH` + Argon2id multi-account selection) is
-Phase 2; do not treat 0.1.1 as a whole-seat VT security boundary yet.
+Version 0.2.0 implements Phase 1/1b (`tam-hide` Wayland `ext-session-lock-v1`
+locker for `tam-pane` with PAM fallback and idle output blanking/wake via
+`ext_idle_notifier_v1` and `zwlr_output_power_manager_v1`) and Phase 2a
+whole-seat authentication and lock-confirmation plumbing:
+
+- Privileged Argon2id (`libargon2`, default m=65536 KiB, t=2, p=1) salted
+  slow-hash passcode store (`passcode_store`, `tam-hidectl passcode-*`) with
+  constant-sweep matching across all accounts.
+- `tam-hided` session registry and compositor lock-confirmation gate (refuses
+  VT handoff away from an active graphical session until `CONFIRM_LOCK` fires),
+  plus a privilege-separated `auth.sock` with active-session `SO_PEERCRED`
+  gating, server-side exponential lockout, and single-use 128-bit `PICK` tokens.
+- `tam-hide` `--ready-fd`, `--auth-socket`, `--session-vt`, and post-auth
+  multi-account/session picker UI (`LOCK_UI_PICKER`).
+
+Phase 2b (disposable KVM/QEMU VM end-to-end verification with real
+`VT_LOCKSWITCH` and multi-VT handoff) is required before installing
+`tam-hided.service` on a live workstation.
 
 Follows the tam-idol 0.2.0 standard.
 
 WHERE THINGS ARE
 
-  src/        Wayland locker (tam-hide) and VT seat-controller prototype (tam-hided)
+  src/        Wayland locker (tam-hide), VT seat controller (tam-hided), CLI (tam-hidectl)
   tests/      unit tests and headless tam-pane integration test
   sandbox/    nested tam-pane demo for manual verification
   arch/       security and compositor design

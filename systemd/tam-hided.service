@@ -1,16 +1,18 @@
-# Prototype systemd unit for isolated VM testing only.
-# Do NOT install on a live workstation; tam-hide 0.0.0 is not a security control.
+# Prototype systemd unit for isolated VM testing only (Phase 2b).
+# Do NOT install on a live workstation until Phase 2b VM verification completes.
 
 [Unit]
-Description=tam-hide prototype seat controller (isolated VM only)
+Description=tam-hide whole-seat VT controller (isolated VM only)
 Conflicts=getty@tty6.service autovt@tty6.service
 After=systemd-logind.service
 
 [Service]
 Type=simple
 RuntimeDirectory=tam-hide
-RuntimeDirectoryMode=0700
-ExecStart=/usr/local/bin/tam-hided --lock-vt 6 --socket /run/tam-hide/control.sock
+RuntimeDirectoryMode=0755
+StateDirectory=tam-hide
+StateDirectoryMode=0700
+ExecStart=/usr/local/bin/tam-hided --lock-vt 6 --socket /run/tam-hide/control.sock --auth-socket /run/tam-hide/auth.sock --store /var/lib/tam-hide/passcodes.db
 Restart=always
 RestartSec=1
 

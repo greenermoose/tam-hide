@@ -1,6 +1,6 @@
 # P1: Session and whole-seat lock
 
-Status: Phase 1 (`0.1.0`) and Phase 1b (`0.1.1`) implemented and verified for `tam-pane` (`dev`), including Fred's nested `sandbox/demo-tam-pane` blank/wake check.
+Status: Phase 1 (`0.1.0`), Phase 1b (`0.1.1`), and Phase 2a (`0.2.0`) implemented and verified on host/headless `tam-pane` (`dev`); Phase 2b disposable KVM VM end-to-end verification is next before any live seat/login change.
 
 ## Completed groundwork
 
@@ -38,14 +38,24 @@ Status: Phase 1 (`0.1.0`) and Phase 1b (`0.1.1`) implemented and verified for `t
      are absent or an output reports `failed`, and restores power before unlock.
    - Verified with `make test` (`test_power_policy`) and 2-output headless
      `tam-pane` (`make test-headless`).
-3. **Phase 2 (`0.2.0`): Broaden to whole-seat VT locking**
-   - Wire `tam-hide` lock confirmation (`--ready-fd` / adapter IPC) into
-     `tam-hided` before atomic VT handoff.
-   - Implement the privileged Argon2id salted slow-hash passcode store,
-     passcode-only matching (no passcodes in argv/logs), and duplicate-passcode
-     account/session picker.
-   - Verify end-to-end in a disposable KVM VM before proposing any live login
-     or seat change.
+3. **Phase 2a (`0.2.0`, implemented in W8): Lock confirmation, Argon2id store, and multi-account picker**
+   - Privileged `libargon2` Argon2id passcode store (`src/passcode_store.{h,c}`,
+     default `m=65536, t=2, p=1`, hard floors `m >= 19456, t >= 2, p = 1`,
+     `0600` atomic save, `$argon2id$`-only load, constant-sweep matching across
+     all accounts) and `tam-hidectl passcode-{set,del,list}` (reads passcodes
+     from stdin/TTY without echo, never argv).
+   - `tam-hided` session registry and compositor lock-confirmation gate
+     (refuses `LOCK`/`HANDOFF` away from an active graphical session until
+     `CONFIRM_LOCK`), plus privilege-separated `--auth-socket` with
+     active-session `SO_PEERCRED` gating, server-side exponential lockout, and
+     single-use 128-bit `PICK` tokens (`AUTH`/`SELECT`/`CANCEL`).
+   - `tam-hide` `--ready-fd`, `--auth-socket`, `--session-vt`, controller auth
+     client (`src/auth_controller.{h,c}`), and post-auth `LOCK_UI_PICKER` UI.
+   - Verified with `make clean && make all test test-headless`.
+4. **Phase 2b (next): Disposable KVM/QEMU VM end-to-end verification**
+   - Boot a disposable Arch KVM guest with `tam-hided`, real `VT_LOCKSWITCH`,
+     Argon2id passcode store, and multi-account VT handoff before proposing any
+     live login or seat change.
 
 ## Rules and boundaries
 

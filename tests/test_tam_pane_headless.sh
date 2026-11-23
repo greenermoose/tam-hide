@@ -1,19 +1,21 @@
 #!/bin/sh
 # Headless integration test: verify tam-hide's ext-session-lock-v1 engine,
 # idle output blanking (ext_idle_notifier_v1 + zwlr_output_power_manager_v1),
-# disabled-blanking mode, and fail-closed SIGTERM against 2-output tam-pane.
+# disabled-blanking mode, fail-closed SIGTERM, and production --ready-fd
+# lock confirmation against 2-output tam-pane.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 TAM_PANE="$ROOT/../tam-pane/build/tam-pane"
 LOCKER="$ROOT/build/test_wayland_lock"
+PROD_LOCKER="$ROOT/build/tam-hide"
 
 if [ ! -x "$TAM_PANE" ]; then
 	echo "SKIP: $TAM_PANE not found (build tam-pane first)"
 	exit 0
 fi
-if [ ! -x "$LOCKER" ]; then
-	echo "FAIL: $LOCKER not built (run make test)" >&2
+if [ ! -x "$LOCKER" ] || [ ! -x "$PROD_LOCKER" ]; then
+	echo "FAIL: $LOCKER or $PROD_LOCKER not built (run make all test)" >&2
 	exit 1
 fi
 
@@ -167,4 +169,51 @@ if grep -qE '^(BLANKED|POWER_OFF)$' "$EVENTS2" 2>/dev/null; then
 	exit 1
 fi
 
-echo "PASS: test_tam_pane_headless (2 outputs, WAYLAND_SOCKET lock, idle blanking 2x POWER_OFF, disabled-blank mode, fail-closed SIGTERM)"
+kill "$TP_PID" 2>/dev/null || true
+wait "$TP_PID" 2>/dev/null || true
+TP_PID=""
+
+# --- Case 3: Production build/tam-hide --ready-fd lock confirmation ---
+CFG3="$TMPDIR_TEST/init3.lua"
+READY3="$TMPDIR_TEST/ready3"
+LOG3="$TMPDIR_TEST/tam-pane3.log"
+WRAP3="$TMPDIR_TEST/run-prod.sh"
+XDG_RUNTIME_DIR3="$TMPDIR_TEST/run3"
+mkdir -p "$XDG_RUNTIME_DIR3"
+chmod 700 "$XDG_RUNTIME_DIR3"
+
+cat >"$WRAP3" <<EOF
+#!/bin/sh
+exec "$PROD_LOCKER" --blank-after 0 --ready-fd 3 3>"$READY3"
+EOF
+chmod +x "$WRAP3"
+
+cat >"$CFG3" <<EOF
+tp.on("startup", function()
+	tp.lock{"$WRAP3"}
+end)
+EOF
+
+XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR3" \
+WLR_BACKENDS=headless \
+WLR_RENDERER=pixman \
+WLR_HEADLESS_OUTPUTS=2 \
+"$TAM_PANE" -c "$CFG3" >"$LOG3" 2>&1 &
+TP_PID=$!
+
+i=0
+while [ $i -lt 50 ]; do
+	if [ -s "$READY3" ] && grep -q '^LOCKED$' "$READY3"; then
+		break
+	fi
+	sleep 0.1
+	i=$((i + 1))
+done
+
+if ! grep -q '^LOCKED$' "$READY3" 2>/dev/null; then
+	echo "FAIL: production tam-hide --ready-fd 3 did not report LOCKED" >&2
+	cat "$LOG3" >&2
+	exit 1
+fi
+
+echo "PASS: test_tam_pane_headless (2 outputs, WAYLAND_SOCKET lock, idle blanking 2x POWER_OFF, disabled-blank mode, fail-closed SIGTERM, prod --ready-fd)"
