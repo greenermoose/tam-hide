@@ -1,7 +1,7 @@
 CC ?= gcc
 PKG_CONFIG ?= pkg-config
 WAYLAND_SCANNER ?= wayland-scanner
-PREFIX ?= /usr/local
+PREFIX ?= $(HOME)/.local
 VERSION := $(shell tr -d '[:space:]' < VERSION)
 
 CFLAGS ?= -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -O2 -g
