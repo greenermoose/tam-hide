@@ -4,7 +4,7 @@ WAYLAND_SCANNER ?= wayland-scanner
 PREFIX ?= $(HOME)/.local
 VERSION := $(shell tr -d '[:space:]' < VERSION)
 
-CFLAGS ?= -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -O2 -g
+CFLAGS ?= -std=c17 -D_GNU_SOURCE -Wall -Wextra -Werror -O2 -g
 CFLAGS += -DTAM_HIDE_VERSION=\"$(VERSION)\"
 LDFLAGS ?=
 
