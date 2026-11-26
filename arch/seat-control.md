@@ -2,7 +2,7 @@
 
 Status: whole-seat design validated by disposable VM experiment
 ([2026-11-22-seat-vm-experiment.md](../upstream/2026-11-22-seat-vm-experiment.md))
-and minimal C11 seat-controller prototype (`src/tam-hided.c`,
+and minimal C17 seat-controller prototype (`src/tam-hided.c`,
 `src/tam-hidectl.c`, `src/controller.c`, `src/vt.c`,
 `systemd/tam-hided.service`). Phase 1 (`0.1.0`) implements the Wayland
 `ext-session-lock-v1` locker (`src/tam-hide.c`, `src/wl_lock.c`,
