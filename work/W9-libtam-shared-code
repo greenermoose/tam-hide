@@ -1,0 +1,44 @@
+W9 ONTO LIBTAM'S SHARED CODE (TAM-HIDE 0.2.1)
+
+Date: 2026-11-26
+AI harness: Claude Code 2.1.332
+AI model: claude-opus-5-5
+Continues: W8
+
+
+GUIDANCE
+
+  Fred: "Move each program onto the shared code." (tam-hide included,
+  last.)
+
+
+DONE
+
+  - Build: libtam 0.14.0 or later through pkg-config, linked statically,
+    with the archive as a prerequisite.
+  - Daemon: tam_sock_listen (a running daemon's socket or a non-socket is
+    never unlinked; the chown and chmod stay), tam_sock_peer_uid, and
+    tam_sock_read_line with one 2-second deadline for the whole request.
+    Before, the reader read one byte at a time with 2 s per byte while
+    the daemon served one client, so any local user could hold it for
+    minutes. The reader wipes its copy of the bytes (passcodes).
+    test_slow_client_is_dropped.
+  - Passcode store: built in one buffer, written with tam_fs_write_atomic
+    (REPLACE_LINK, 0600), which adds the missing directory fsync, then
+    wiped.
+  - Auth client: tam_sock_connect; a zero-byte write is an error.
+  - tam-hidectl restores echo if interrupted during the passcode prompt.
+  - tam_monotonic_ms for the controller clock. make test passes.
+
+
+FAILED
+
+  - Nothing.
+
+
+HANDOFF
+
+  - Kept on purpose: the auth socket's 0666 default (each user's lock
+    screen must reach it; handlers check the peer uid), the replies'
+    timed single write (tam_write_all would wait past SO_SNDTIMEO), and
+    VT_WAITACTIVE (no libtam equivalent).

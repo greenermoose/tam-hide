@@ -7,7 +7,8 @@ Updated: 2026-11-23, with W8
 
 STATE
 
-  Version 0.2.0 on dev. Phase 1 (`0.1.0`), Phase 1b (`0.1.1`), and Phase 2a
+  Version 0.2.1 on dev (W9): libtam sockets, passcode-store writes and
+  clock; the slow-client stall is fixed. Version 0.2.0 on dev. Phase 1 (`0.1.0`), Phase 1b (`0.1.1`), and Phase 2a
   (`0.2.0`: privileged Argon2id passcode store, `tam-hided` session registry
   and compositor lock-confirmation gate, active-session `SO_PEERCRED`-gated
   `auth.sock` with server-side lockout and single-use 128-bit `PICK` tokens,

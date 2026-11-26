@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "passcode_store.h"
 
+#include <tam.h>
+
 #include <argon2.h>
 #include <ctype.h>
 #include <errno.h>
@@ -189,74 +191,37 @@ int passcode_store_load(struct passcode_store *store, const char *path) {
 	return rc;
 }
 
-static int write_all_fd(int fd, const char *buf, size_t len) {
-	size_t off = 0;
-	while (off < len) {
-		ssize_t n = write(fd, buf + off, len - off);
-		if (n < 0) {
-			if (errno == EINTR)
-				continue;
-			return -errno;
-		}
-		off += (size_t)n;
-	}
-	return 0;
-}
-
 int passcode_store_save(const struct passcode_store *store, const char *path) {
 	if (!store || !path || path[0] == '\0')
 		return -EINVAL;
 
-	char tmp_path[PATH_MAX];
-	int n = snprintf(tmp_path, sizeof(tmp_path), "%s.tmp.%ld", path,
-					 (long)getpid());
-	if (n < 0 || (size_t)n >= sizeof(tmp_path))
-		return -ENAMETOOLONG;
-
-	(void)unlink(tmp_path);
-	int fd = open(tmp_path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC,
-				  0600);
-	if (fd < 0)
-		return -errno;
-
-	if (fchmod(fd, 0600) < 0) {
-		int err = -errno;
-		close(fd);
-		(void)unlink(tmp_path);
-		return err;
-	}
-
+	/* The whole file is built in one buffer, written with
+	 * tam_fs_write_atomic (temporary file, fsync, rename, directory fsync:
+	 * the old save skipped the directory fsync, so a crash could lose a
+	 * new passcode), and wiped. The path is replaced, never followed, as
+	 * the loader opens it with O_NOFOLLOW. */
 	const char *hdr = "# tam-hide passcode store v1 (uid:username:argon2id)\n";
-	int rc = write_all_fd(fd, hdr, strlen(hdr));
-	for (size_t i = 0; rc == 0 && i < store->count; i++) {
+	size_t cap = strlen(hdr) + 1 + store->count * 512;
+	char *buf = malloc(cap);
+	if (!buf)
+		return -ENOMEM;
+	size_t len = (size_t)snprintf(buf, cap, "%s", hdr);
+	int rc = 0;
+	for (size_t i = 0; i < store->count; i++) {
 		const struct passcode_entry *e = &store->entries[i];
-		char line[512];
-		int m = snprintf(line, sizeof(line), "%u:%s:%s\n", (unsigned)e->uid,
+		int m = snprintf(buf + len, cap - len, "%u:%s:%s\n", (unsigned)e->uid,
 						 e->username, e->encoded_hash);
-		if (m < 0 || (size_t)m >= sizeof(line)) {
+		if (m < 0 || (size_t)m >= 512 || (size_t)m >= cap - len) {
 			rc = -E2BIG;
 			break;
 		}
-		rc = write_all_fd(fd, line, (size_t)m);
-		explicit_bzero(line, sizeof(line));
+		len += (size_t)m;
 	}
-
-	if (rc == 0 && fsync(fd) < 0)
+	if (rc == 0 && tam_fs_write_atomic(path, buf, len, TAM_FS_REPLACE_LINK, 0600) < 0)
 		rc = -errno;
-	if (close(fd) < 0 && rc == 0)
-		rc = -errno;
-
-	if (rc != 0) {
-		(void)unlink(tmp_path);
-		return rc;
-	}
-
-	if (rename(tmp_path, path) < 0) {
-		int err = -errno;
-		(void)unlink(tmp_path);
-		return err;
-	}
-	return 0;
+	explicit_bzero(buf, cap);
+	free(buf);
+	return rc;
 }
 
 int passcode_store_set(struct passcode_store *store, uid_t uid,

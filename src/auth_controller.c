@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "auth_controller.h"
 
+#include <tam.h>
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,7 +17,7 @@ static int ipc_roundtrip(const char *socket_path, const char *req,
 	if (!socket_path || !req || req_len == 0 || !resp || resp_size == 0)
 		return -EINVAL;
 
-	int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	int fd = tam_sock_connect(socket_path, 5000);
 	if (fd < 0)
 		return -errno;
 
@@ -23,28 +25,13 @@ static int ipc_roundtrip(const char *socket_path, const char *req,
 	(void)setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 	(void)setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
-	struct sockaddr_un addr;
-	memset(&addr, 0, sizeof(addr));
-	if (strlen(socket_path) >= sizeof(addr.sun_path)) {
-		close(fd);
-		return -ENAMETOOLONG;
-	}
-	addr.sun_family = AF_UNIX;
-	strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
-
-	if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-		int err = -errno;
-		close(fd);
-		return err;
-	}
-
 	size_t off = 0;
 	while (off < req_len) {
 		ssize_t n = write(fd, req + off, req_len - off);
-		if (n < 0) {
-			if (errno == EINTR)
+		if (n <= 0) {
+			if (n < 0 && errno == EINTR)
 				continue;
-			int err = -errno;
+			int err = n < 0 ? -errno : -EIO;
 			close(fd);
 			return err;
 		}

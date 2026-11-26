@@ -15,6 +15,19 @@ ARGON2_CFLAGS := $(shell $(PKG_CONFIG) --cflags libargon2)
 ARGON2_LIBS := $(shell $(PKG_CONFIG) --libs libargon2)
 PAM_LIBS := -lpam
 
+# libtam (sockets, atomic writes, clock), linked statically. 0.14.0 or later:
+# its socket line reader wipes request bytes, which may be passcodes.
+export PKG_CONFIG_PATH := $(HOME)/.local/lib/pkgconfig$(if $(PKG_CONFIG_PATH),:$(PKG_CONFIG_PATH))
+LIBTAM_OK := $(shell $(PKG_CONFIG) --atleast-version=0.14.0 libtam 2>/dev/null && echo yes)
+ifeq ($(LIBTAM_OK),)
+$(error tam-hide needs libtam 0.14.0 or later; install it or add its pkg-config directory to PKG_CONFIG_PATH)
+endif
+LIBTAM_CFLAGS := $(shell $(PKG_CONFIG) --cflags libtam)
+LIBTAM_LIBS := $(shell $(PKG_CONFIG) --libs libtam)
+LIBTAM_ARCHIVE := $(wildcard $(shell $(PKG_CONFIG) --variable=libdir libtam)/libtam.a)
+CFLAGS += $(LIBTAM_CFLAGS)
+LDFLAGS += $(LIBTAM_LIBS)
+
 WAYLAND_PROTOCOLS_DIR := $(shell $(PKG_CONFIG) --variable=pkgdatadir wayland-protocols)
 SESSION_LOCK_XML := $(WAYLAND_PROTOCOLS_DIR)/staging/ext-session-lock/ext-session-lock-v1.xml
 IDLE_NOTIFY_XML := $(WAYLAND_PROTOCOLS_DIR)/staging/ext-idle-notify/ext-idle-notify-v1.xml
@@ -60,15 +73,15 @@ $(OUTPUT_POWER_H): $(OUTPUT_POWER_XML) | $(PROTO_DIR)
 $(OUTPUT_POWER_C): $(OUTPUT_POWER_XML) | $(PROTO_DIR)
 	$(WAYLAND_SCANNER) private-code $< $@
 
-$(BUILD)/tam-hide: src/tam-hide.c src/auth_pam.c $(LOCK_CORE_SRCS) $(LOCK_CORE_HDRS) | $(BUILD)
+$(BUILD)/tam-hide: $(LIBTAM_ARCHIVE) src/tam-hide.c src/auth_pam.c $(LOCK_CORE_SRCS) $(LOCK_CORE_HDRS) | $(BUILD)
 	$(CC) $(CFLAGS) -Isrc -I$(PROTO_DIR) $(WL_CFLAGS) -o $@ \
 		src/tam-hide.c src/auth_pam.c $(LOCK_CORE_SRCS) $(LDFLAGS) $(WL_LIBS) $(PAM_LIBS)
 
-$(BUILD)/tam-hided: src/tam-hided.c src/controller.c src/vt.c src/passcode_store.c src/controller.h src/vt.h src/passcode_store.h | $(BUILD)
+$(BUILD)/tam-hided: $(LIBTAM_ARCHIVE) src/tam-hided.c src/controller.c src/vt.c src/passcode_store.c src/controller.h src/vt.h src/passcode_store.h | $(BUILD)
 	$(CC) $(CFLAGS) -Isrc $(ARGON2_CFLAGS) -o $@ \
 		src/tam-hided.c src/controller.c src/vt.c src/passcode_store.c $(LDFLAGS) $(ARGON2_LIBS)
 
-$(BUILD)/tam-hidectl: src/tam-hidectl.c src/passcode_store.c src/passcode_store.h | $(BUILD)
+$(BUILD)/tam-hidectl: $(LIBTAM_ARCHIVE) src/tam-hidectl.c src/passcode_store.c src/passcode_store.h | $(BUILD)
 	$(CC) $(CFLAGS) -Isrc $(ARGON2_CFLAGS) -o $@ \
 		src/tam-hidectl.c src/passcode_store.c $(LDFLAGS) $(ARGON2_LIBS)
 

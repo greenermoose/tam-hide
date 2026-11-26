@@ -3,6 +3,8 @@
 #include "controller.h"
 
 #include <assert.h>
+#include <time.h>
+#include <signal.h>
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -328,7 +330,49 @@ static void test_auth_socket_and_multi_account_picker(void) {
 	controller_cleanup(&c, true);
 }
 
+/* A client that trickles bytes cannot hold the daemon: the whole request
+ * must arrive within 2 s (it used to be 2 s per byte). */
+static void test_slow_client_is_dropped(void) {
+	struct mock_vt m = { .active_vt = 3, .locked = false };
+	struct vt_ops ops = make_mock_ops(&m);
+	char sock[64];
+	snprintf(sock, sizeof(sock), "/tmp/tam-hide-slow-%d.sock", (int)getpid());
+	struct seat_controller c;
+	assert(controller_init(&c, &ops, 6, sock, getuid()) == 0);
+
+	pid_t pid = fork();
+	assert(pid >= 0);
+	if (pid == 0) {
+		int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+		struct sockaddr_un addr;
+		memset(&addr, 0, sizeof(addr));
+		addr.sun_family = AF_UNIX;
+		strncpy(addr.sun_path, sock, sizeof(addr.sun_path) - 1);
+		if (fd < 0 || connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+			_exit(1);
+		/* One byte every 300 ms, never a newline. */
+		for (int i = 0; i < 20; i++) {
+			if (write(fd, "S", 1) != 1)
+				break;
+			struct timespec ts = { 0, 300 * 1000000L };
+			nanosleep(&ts, NULL);
+		}
+		_exit(0);
+	}
+
+	struct timespec t0, t1;
+	clock_gettime(CLOCK_MONOTONIC, &t0);
+	(void)controller_handle_one(&c);
+	clock_gettime(CLOCK_MONOTONIC, &t1);
+	double took = (double)(t1.tv_sec - t0.tv_sec) + (double)(t1.tv_nsec - t0.tv_nsec) / 1e9;
+	assert(took < 3.0);
+	kill(pid, SIGKILL);
+	(void)waitpid(pid, NULL, 0);
+	controller_cleanup(&c, false);
+}
+
 int main(void) {
+	test_slow_client_is_dropped();
 	test_startup_recovery_and_ipc();
 	test_fail_closed_on_activate_error();
 	test_lock_confirmation_gate();

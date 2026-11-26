@@ -2,6 +2,7 @@
 #include "passcode_store.h"
 
 #include <errno.h>
+#include <signal.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -33,6 +34,18 @@ static void usage(const char *prog) {
 			prog);
 }
 
+/* While echo is off, Ctrl+C, a hang-up or a kill puts it back before the
+ * signal takes its default action, so the terminal is not left silent. */
+static struct termios g_echo_termios;
+static volatile sig_atomic_t g_echo_saved;
+
+static void restore_echo_and_die(int sig) {
+	if (g_echo_saved)
+		(void)tcsetattr(STDIN_FILENO, TCSANOW, &g_echo_termios);
+	signal(sig, SIG_DFL);
+	raise(sig);
+}
+
 static int read_passcode_stdin(char *buf, size_t buf_size, size_t *out_len) {
 	bool is_tty = isatty(STDIN_FILENO) != 0;
 	struct termios oldt, newt;
@@ -42,6 +55,11 @@ static int read_passcode_stdin(char *buf, size_t buf_size, size_t *out_len) {
 		if (tcgetattr(STDIN_FILENO, &oldt) == 0) {
 			newt = oldt;
 			newt.c_lflag &= ~(tcflag_t)ECHO;
+			g_echo_termios = oldt;
+			g_echo_saved = 1;
+			signal(SIGINT, restore_echo_and_die);
+			signal(SIGTERM, restore_echo_and_die);
+			signal(SIGHUP, restore_echo_and_die);
 			if (tcsetattr(STDIN_FILENO, TCSANOW, &newt) == 0)
 				echo_disabled = true;
 		}
@@ -71,6 +89,12 @@ static int read_passcode_stdin(char *buf, size_t buf_size, size_t *out_len) {
 	if (echo_disabled) {
 		(void)tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
 		fprintf(stderr, "\n");
+	}
+	if (is_tty) {
+		g_echo_saved = 0;
+		signal(SIGINT, SIG_DFL);
+		signal(SIGTERM, SIG_DFL);
+		signal(SIGHUP, SIG_DFL);
 	}
 	if (rc < 0) {
 		explicit_bzero(buf, buf_size);

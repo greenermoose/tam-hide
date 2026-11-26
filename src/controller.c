@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "controller.h"
 
+#include <tam.h>
+
 #include <errno.h>
 #include <limits.h>
 #include <stdio.h>
@@ -20,10 +22,7 @@
 #define MAX_SERVER_LOCKOUT_SEC 10
 
 static int64_t ctrl_monotonic_ms(void) {
-	struct timespec ts;
-	if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
-		return 0;
-	return (int64_t)ts.tv_sec * 1000 + (int64_t)(ts.tv_nsec / 1000000);
+	return tam_monotonic_ms();
 }
 
 const char *seat_state_name(enum seat_state st) {
@@ -46,28 +45,11 @@ static void wipe_pending_pick(struct seat_controller *c) {
 }
 
 static int bind_unix_socket(const char *path, mode_t mode, gid_t gid) {
-	struct sockaddr_un addr;
-	memset(&addr, 0, sizeof(addr));
-	if (!path || strlen(path) >= sizeof(addr.sun_path))
-		return -EINVAL;
-
-	int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	/* tam_sock_listen replaces only a stale socket: a daemon that is still
+	 * running, or anything that is not a socket, is never unlinked. */
+	int fd = tam_sock_listen(path, 0600, 8);
 	if (fd < 0)
 		return -errno;
-
-	(void)unlink(path);
-
-	addr.sun_family = AF_UNIX;
-	strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
-
-	mode_t old_umask = umask(0177);
-	int rc = bind(fd, (struct sockaddr *)&addr, sizeof(addr));
-	umask(old_umask);
-	if (rc < 0) {
-		int err = -errno;
-		close(fd);
-		return err;
-	}
 
 	if (gid != (gid_t)-1) {
 		if (chown(path, (uid_t)-1, gid) < 0) {
@@ -79,13 +61,6 @@ static int bind_unix_socket(const char *path, mode_t mode, gid_t gid) {
 	}
 
 	if (chmod(path, mode) < 0) {
-		int err = -errno;
-		close(fd);
-		(void)unlink(path);
-		return err;
-	}
-
-	if (listen(fd, 8) < 0) {
 		int err = -errno;
 		close(fd);
 		(void)unlink(path);
@@ -752,24 +727,19 @@ int controller_dispatch(struct seat_controller *c,
 	return rc;
 }
 
+/* One request line within one 2-second deadline for the whole line. The
+ * daemon serves one client at a time, so a client that trickles bytes (or
+ * sends none) must not hold it: the old reader allowed 2 s per byte. The
+ * reader wipes its copy of the bytes, which may carry a passcode. */
 static ssize_t read_bounded_line(int fd, char *buf, size_t max_len) {
-	size_t pos = 0;
-	while (pos + 1 < max_len) {
-		char ch = 0;
-		ssize_t n = read(fd, &ch, 1);
-		if (n < 0) {
-			if (errno == EINTR)
-				continue;
-			return -errno;
-		}
-		if (n == 0)
-			break;
-		buf[pos++] = ch;
-		if (ch == '\n')
-			break;
+	ssize_t n = tam_sock_read_line(fd, buf, max_len, 2000);
+	if (n >= 0)
+		return n;
+	if (errno == ENODATA) {
+		buf[0] = '\0';
+		return 0;
 	}
-	buf[pos] = '\0';
-	return (ssize_t)pos;
+	return -errno;
 }
 
 static int handle_socket_one(struct seat_controller *c, int listen_fd,
@@ -786,8 +756,7 @@ static int handle_socket_one(struct seat_controller *c, int listen_fd,
 	(void)setsockopt(client_fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
 	struct ucred cred;
-	socklen_t cred_len = sizeof(cred);
-	if (getsockopt(client_fd, SOL_SOCKET, SO_PEERCRED, &cred, &cred_len) < 0) {
+	if (tam_sock_peer_uid(client_fd, &cred.uid) < 0) {
 		const char *err = "ERR peercred_failed\n";
 		(void)write(client_fd, err, strlen(err));
 		close(client_fd);
