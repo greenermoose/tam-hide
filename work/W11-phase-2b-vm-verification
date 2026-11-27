@@ -1,0 +1,53 @@
+W11 PHASE 2B DISPOSABLE KVM VM VERIFICATION (0.2.2)
+
+Date: 2026-11-27
+AI harness: Antigravity CLI
+AI model: Gemini 4 Neon (Medium)
+Continues: W10
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice for tam-hide" -> reviewed plan in
+  tam-view and approved ("Approved. Proceed.").
+
+DONE
+
+  - Fixed two cross-VT handoff defects caught during pre-plan inspection and
+    VM testing:
+    - Added `AUTH_HANDOFF` (`src/auth.h`, `src/auth.c`, `src/auth_controller.c`,
+      `src/wl_lock.c`) so authenticating for a different VT keeps the active
+      VT's Wayland session locked and resets the UI to `LOCK_UI_IDLE` instead
+      of calling `complete_unlock()`.
+    - Preserved `dst->lock_confirmed` across cross-VT handoffs in
+      `src/controller.c` (`perform_handoff_to_vt`), clearing it only on
+      same-VT unlock, so returning to a still-locked graphical VT still permits
+      its `tam-hide` instance to authenticate and unlock.
+    - Updated `src/vt.c` lock banner to use `TAM_HIDE_VERSION`.
+    - Extended `tests/test_controller.c` to cover cross-VT `AUTH_HANDOFF`
+      (direct and picker) and preserved `lock_confirmed` on return.
+  - Verified all host unit tests and the 2-output headless `tam-pane`
+    integration suite (`make all test test-headless`).
+  - Executed full Phase 2b disposable KVM/QEMU Arch guest verification
+    (VM1-VM8) with real kernel `VT_LOCKSWITCH`, `tam-hided.service`,
+    Argon2id `passcodes.db` (`m=65536, t=2, p=1`), `sway` 1.12 (`tty4`),
+    `bob` (`tty3`), `carol` (`tty2`), QMP `send-key`, and QMP `screendump`:
+    all 8 checks passed (startup auto-lock, socket `SO_PEERCRED` isolation,
+    lock-confirmation gate, server-side lockout, unique-passcode cross-VT
+    handoff keeping `tty4` locked, duplicate-passcode `LOCK_UI_PICKER`
+    cross-VT handoff + same-VT unlock, `SIGKILL` fail-closed resilience on
+    both `tam-hide` and `tam-hided` with `systemd` restart to `tty6`, and
+    clean teardown).
+  - Recorded `upstream/2026-11-27-phase2b-vm-verification.md`, bumped
+    `VERSION` to `0.2.2`, and updated `ROADMAP.md`, `plans/P1-lock.md`,
+    `README`, and `work/WHATNOW`.
+
+FAILED
+
+  Nothing.
+
+HANDOFF
+
+  Phase P1 (0.0.0-0.2.2) is verified end-to-end in a disposable KVM VM.
+  Live workstation integration (`tam-hided.service` installation, `tam-pane`
+  DRM/KMS seat handoff, and rollback plan) waits for Fred's explicit go-ahead
+  and a recorded rollback point.

@@ -14,6 +14,7 @@ enum auth_outcome {
 	AUTH_ERROR = 2,
 	AUTH_PICK = 3,
 	AUTH_LOCKOUT = 4,
+	AUTH_HANDOFF = 5,
 };
 
 struct auth_result {

@@ -3,34 +3,35 @@ WHATNOW
 What tam-hide is doing now and what comes next. Read this first; revise it
 at the end of every session (work/README-work).
 
-Updated: 2026-11-26, with W10
+Updated: 2026-11-27, with W11
 
 STATE
 
-  Version 0.2.1 on dev (W9): libtam sockets, passcode-store writes and
-  clock; the slow-client stall is fixed. Version 0.2.0 on dev. Phase 1 (`0.1.0`), Phase 1b (`0.1.1`), and Phase 2a
-  (`0.2.0`: privileged Argon2id passcode store, `tam-hided` session registry
-  and compositor lock-confirmation gate, active-session `SO_PEERCRED`-gated
-  `auth.sock` with server-side lockout and single-use 128-bit `PICK` tokens,
-  and `tam-hide` `--ready-fd` / `--auth-socket` / `--session-vt` + post-auth
-  multi-account/session picker UI) are implemented and pass all automated unit
-  tests (`test_passcode_store`, `test_controller`, `test_lock_state`,
-  `test_power_policy`, `test_auth`) and the 2-output headless `tam-pane`
-  integration suite (`make test-headless`).
+  Version 0.2.2 on dev (W11). Phase P1 (0.0.0-0.2.2) is complete and verified
+  end-to-end:
+  - Host unit tests (`test_passcode_store`, `test_controller`,
+    `test_lock_state`, `test_power_policy`, `test_auth`) and 2-output headless
+    `tam-pane` integration suite (`make test-headless`) pass.
+  - Phase 2b disposable KVM/QEMU Arch guest verification (VM1-VM8) passed
+    (`upstream/2026-11-27-phase2b-vm-verification.md`), including cross-VT
+    handoff fixes (`AUTH_HANDOFF` keeping the active graphical VT locked and
+    `lock_confirmed` persisting across cross-VT switches), real kernel
+    `VT_LOCKSWITCH`, Argon2id `passcodes.db`, `LOCK_UI_PICKER`, and `SIGKILL`
+    fail-closed recovery.
 
 NEXT
 
-  1. Phase 2b: verify `tam-hided` + `tam-hide` + Argon2id passcode store +
-     lock-confirmation gate + multi-account VT handoff end-to-end in a
-     disposable KVM/QEMU VM with real kernel `VT_LOCKSWITCH`.
+  1. Plan live workstation / `tam-pane` DRM/KMS integration (for Tamlinux 0.8
+     Nash Pendula) once Fred authorizes live seat/login work with a recorded
+     rollback point.
 
 WAITING FOR FRED
 
-  Nothing.
+  Approval and target host selection before any live `tam-hided.service` or
+  seat/login integration.
 
 WATCH OUT
 
-  Phase 2a (0.2.0) is host/headless verified only; do not install
-  systemd/tam-hided.service on a live host until Phase 2b disposable KVM VM
-  verification passes and Fred approves with a recorded rollback point.
-  Never add auth-bypass CLI flags to build/tam-hide.
+  Do not install `systemd/tam-hided.service` on a live host without Fred's
+  explicit approval and a recorded rollback point.
+  Never add auth-bypass CLI flags to `build/tam-hide`.

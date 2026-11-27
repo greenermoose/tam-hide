@@ -1,6 +1,6 @@
 # P1: Session and whole-seat lock
 
-Status: Phase 1 (`0.1.0`), Phase 1b (`0.1.1`), and Phase 2a (`0.2.0`) implemented and verified on host/headless `tam-pane` (`dev`); Phase 2b disposable KVM VM end-to-end verification is next before any live seat/login change.
+Status: Phase 1 (`0.1.0`), Phase 1b (`0.1.1`), Phase 2a (`0.2.0`/`0.2.1`), and Phase 2b (`0.2.2`, disposable KVM VM end-to-end verification VM1–VM8) complete on `dev`. Live workstation seat/login integration requires Fred's explicit approval and a recorded rollback point.
 
 ## Completed groundwork
 
@@ -52,10 +52,14 @@ Status: Phase 1 (`0.1.0`), Phase 1b (`0.1.1`), and Phase 2a (`0.2.0`) implemente
    - `tam-hide` `--ready-fd`, `--auth-socket`, `--session-vt`, controller auth
      client (`src/auth_controller.{h,c}`), and post-auth `LOCK_UI_PICKER` UI.
    - Verified with `make clean && make all test test-headless`.
-4. **Phase 2b (next): Disposable KVM/QEMU VM end-to-end verification**
-   - Boot a disposable Arch KVM guest with `tam-hided`, real `VT_LOCKSWITCH`,
-     Argon2id passcode store, and multi-account VT handoff before proposing any
-     live login or seat change.
+4. **Phase 2b (`0.2.2`, verified in W11): Disposable KVM/QEMU VM end-to-end verification**
+   - Fixed cross-VT handoff semantics (`AUTH_HANDOFF` keeps the active VT's
+     Wayland session locked on cross-VT switch; `perform_handoff_to_vt`
+     preserves `lock_confirmed` across cross-VT switches).
+   - Verified VM1–VM8 end-to-end in a disposable Arch KVM guest with real
+     kernel `VT_LOCKSWITCH`, `tam-hided.service`, Argon2id `passcodes.db`,
+     `sway` 1.12, multi-account `LOCK_UI_PICKER`, and `SIGKILL` crash
+     recovery (`upstream/2026-11-27-phase2b-vm-verification.md`).
 
 ## Rules and boundaries
 

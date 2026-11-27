@@ -78,6 +78,19 @@ void auth_controller_on_locked(void *vctx) {
 	(void)auth_controller_confirm_lock(ctx->socket_path, ctx->session_vt);
 }
 
+static enum auth_outcome outcome_for_ok_resp(const struct auth_controller_ctx *ctx,
+											 const char *resp) {
+	if (ctx && ctx->session_vt > 0) {
+		const char *p = strstr(resp, " vt=");
+		if (p) {
+			int target_vt = atoi(p + 4);
+			if (target_vt > 0 && target_vt != ctx->session_vt)
+				return AUTH_HANDOFF;
+		}
+	}
+	return AUTH_OK;
+}
+
 void auth_controller_verify(const char *password, size_t len, void *vctx,
 							struct auth_result *out) {
 	if (!out)
@@ -105,7 +118,7 @@ void auth_controller_verify(const char *password, size_t len, void *vctx,
 	}
 
 	if (strncmp(resp, "OK ", 3) == 0) {
-		out->outcome = AUTH_OK;
+		out->outcome = outcome_for_ok_resp(ctx, resp);
 	} else if (strncmp(resp, "ERR lockout sec=", 16) == 0) {
 		out->outcome = AUTH_LOCKOUT;
 		out->lockout_sec = atoi(resp + 16);
@@ -169,7 +182,8 @@ enum auth_outcome auth_controller_select(const char *token, int index,
 		return AUTH_ERROR;
 	}
 	enum auth_outcome res =
-		(strncmp(resp, "OK ", 3) == 0) ? AUTH_OK : AUTH_DENIED;
+		(strncmp(resp, "OK ", 3) == 0) ? outcome_for_ok_resp(ctx, resp)
+									   : AUTH_DENIED;
 	explicit_bzero(resp, sizeof(resp));
 	return res;
 }

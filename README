@@ -3,10 +3,11 @@ TAM-HIDE - WORKSTATION PRIVACY FOR TAMLINUX
 tam-hide locks a Tamlinux workstation cleanly and without disclosing account
 or session details.
 
-Version 0.2.0 implements Phase 1/1b (`tam-hide` Wayland `ext-session-lock-v1`
+Version 0.2.2 implements Phase 1/1b (`tam-hide` Wayland `ext-session-lock-v1`
 locker for `tam-pane` with PAM fallback and idle output blanking/wake via
-`ext_idle_notifier_v1` and `zwlr_output_power_manager_v1`) and Phase 2a
-whole-seat authentication and lock-confirmation plumbing:
+`ext_idle_notifier_v1` and `zwlr_output_power_manager_v1`), Phase 2a
+whole-seat authentication and lock-confirmation plumbing, and Phase 2b
+disposable KVM/QEMU VM end-to-end verification:
 
 - Privileged Argon2id (`libargon2`, default m=65536 KiB, t=2, p=1) salted
   slow-hash passcode store (`passcode_store`, `tam-hidectl passcode-*`) with
@@ -15,12 +16,16 @@ whole-seat authentication and lock-confirmation plumbing:
   VT handoff away from an active graphical session until `CONFIRM_LOCK` fires),
   plus a privilege-separated `auth.sock` with active-session `SO_PEERCRED`
   gating, server-side exponential lockout, and single-use 128-bit `PICK` tokens.
-- `tam-hide` `--ready-fd`, `--auth-socket`, `--session-vt`, and post-auth
-  multi-account/session picker UI (`LOCK_UI_PICKER`).
+- `tam-hide` `--ready-fd`, `--auth-socket`, `--session-vt`, cross-VT
+  `AUTH_HANDOFF` handling (keeping the current Wayland session locked when
+  switching to another VT), and post-auth multi-account/session picker UI
+  (`LOCK_UI_PICKER`).
 
-Phase 2b (disposable KVM/QEMU VM end-to-end verification with real
-`VT_LOCKSWITCH` and multi-VT handoff) is required before installing
-`tam-hided.service` on a live workstation.
+Phase 2b (`upstream/2026-11-27-phase2b-vm-verification.md`) verified
+`tam-hided`, `tam-hide`, `VT_LOCKSWITCH`, and multi-account VT handoff
+end-to-end in a disposable Arch KVM guest. Installing `tam-hided.service` on a
+live workstation remains gated on Fred's explicit approval and a recorded
+rollback point.
 
 Follows the tam-idol 1.3.0 standard.
 

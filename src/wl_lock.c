@@ -429,6 +429,13 @@ static void kb_key(void *data, struct wl_keyboard *kb, uint32_t serial,
 					complete_unlock(ctx, now_ms);
 					return;
 				}
+				if (sel == AUTH_HANDOFF) {
+					/* Seat moved to another VT; keep this Wayland session locked. */
+					lock_state_on_auth_result(&ctx->state, true, now_ms);
+					emit_event(ctx, "HANDOFF\n");
+					render_all_outputs(ctx);
+					return;
+				}
 			}
 			lock_state_on_auth_result(&ctx->state, false, now_ms);
 			render_all_outputs(ctx);
@@ -838,7 +845,11 @@ int wl_lock_run(const struct wl_lock_config *cfg) {
 				complete_unlock(&ctx, now_ms);
 				break;
 			}
-			if (res.outcome == AUTH_PICK &&
+			if (res.outcome == AUTH_HANDOFF) {
+				/* Seat moved to another VT; keep this Wayland session locked. */
+				lock_state_on_auth_result(&ctx.state, true, now_ms);
+				emit_event(&ctx, "HANDOFF\n");
+			} else if (res.outcome == AUTH_PICK &&
 				lock_state_enter_picker(&ctx.state, res.pick_token,
 										res.pick_items, res.pick_count)) {
 				emit_event(&ctx, "PICKER\n");

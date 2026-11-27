@@ -240,9 +240,13 @@ static int perform_handoff_to_vt(struct seat_controller *c, int target_vt,
 
 	c->active_vt = target_vt;
 	c->state = SEAT_STATE_ACTIVE_USER;
-	struct seat_session *dst = find_session_by_vt(c, target_vt);
-	if (dst && dst->kind == SESSION_KIND_GRAPHICAL)
-		dst->lock_confirmed = false;
+	/*
+	 * Do not clear dst->lock_confirmed on a cross-VT handoff: a newly
+	 * registered unlocked graphical session already starts with
+	 * lock_confirmed=false, while a previously locked graphical session
+	 * remains locked by its compositor until its own tam-hide unlocks it
+	 * via a same-VT AUTH/SELECT.
+	 */
 	return 0;
 }
 

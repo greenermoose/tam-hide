@@ -191,7 +191,8 @@ void auth_finish_ex(struct auth_job *job, struct auth_result *out) {
 		return;
 
 	if (tmp.outcome == AUTH_OK || tmp.outcome == AUTH_DENIED ||
-		tmp.outcome == AUTH_PICK || tmp.outcome == AUTH_LOCKOUT) {
+		tmp.outcome == AUTH_PICK || tmp.outcome == AUTH_LOCKOUT ||
+		tmp.outcome == AUTH_HANDOFF) {
 		if (tmp.pick_count > TAM_HIDE_MAX_PICK_ITEMS)
 			tmp.pick_count = TAM_HIDE_MAX_PICK_ITEMS;
 		*out = tmp;

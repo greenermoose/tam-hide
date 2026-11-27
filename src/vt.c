@@ -86,6 +86,10 @@ static int linux_activate_and_wait(void *vctx, int vt_nr) {
     return rc;
 }
 
+#ifndef TAM_HIDE_VERSION
+#define TAM_HIDE_VERSION "0.2.2"
+#endif
+
 static int linux_render_banner(void *vctx, int lock_vt, const char *status) {
     (void)vctx;
     char path[32];
@@ -100,9 +104,9 @@ static int linux_render_banner(void *vctx, int lock_vt, const char *status) {
     char msg[256];
     int m = snprintf(msg, sizeof(msg),
                      "\033c\n"
-                     "  tam-hide prototype 0.0.0 (not a security control)\n"
+                     "  tam-hide %s\n"
                      "  Seat locked on tty%d (%s)\n",
-                     lock_vt, status ? status : "locked");
+                     TAM_HIDE_VERSION, lock_vt, status ? status : "locked");
     int rc = 0;
     if (m > 0) {
         size_t len = (size_t)m;

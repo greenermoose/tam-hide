@@ -292,7 +292,8 @@ static void test_auth_socket_and_multi_account_picker(void) {
 	assert(controller_dispatch_auth(&c, getuid(), sel_cmd,
 									resp, sizeof(resp)) == -ENOENT);
 
-	/* Real auth.sock IPC via auth_controller client: CONFIRM_LOCK, PICK, SELECT, lockout. */
+	/* Real auth.sock IPC via auth_controller client: CONFIRM_LOCK, cross-VT HANDOFF,
+	 * return to still-locked graphical VT, PICK, SELECT, and lockout. */
 	pid_t pid = fork();
 	assert(pid >= 0);
 	if (pid == 0) {
@@ -302,12 +303,22 @@ static void test_auth_socket_and_multi_account_picker(void) {
 		};
 		assert(auth_controller_confirm_lock(auth_sock, 2) == 0);
 
+		/* Direct AUTH for another VT (carol on tty4) must return AUTH_HANDOFF, not AUTH_OK. */
 		struct auth_result res;
+		auth_controller_verify("carolpass", 9, &actx, &res);
+		assert(res.outcome == AUTH_HANDOFF);
+
+		/* Picker SELECT for another VT (bob on tty3) must also return AUTH_HANDOFF. */
 		auth_controller_verify("shared", 6, &actx, &res);
 		assert(res.outcome == AUTH_PICK);
 		assert(res.pick_count == 2);
 		assert(strcmp(res.pick_items[0].username, "alice") == 0);
 		assert(strcmp(res.pick_items[1].username, "bob") == 0);
+		assert(auth_controller_select(res.pick_token, 1, &actx) == AUTH_HANDOFF);
+
+		/* Picker SELECT for our own VT (alice on tty2) returns AUTH_OK. */
+		auth_controller_verify("shared", 6, &actx, &res);
+		assert(res.outcome == AUTH_PICK);
 		assert(auth_controller_select(res.pick_token, 0, &actx) == AUTH_OK);
 
 		auth_controller_verify("wrong1", 6, &actx, &res);
@@ -320,12 +331,35 @@ static void test_auth_socket_and_multi_account_picker(void) {
 		auth_controller_cancel(&actx);
 		_exit(0);
 	}
-	for (int i = 0; i < 7; i++)
+	for (int i = 0; i < 10; i++)
 		assert(controller_handle_auth_one(&c) == 0);
 	int status = 0;
 	assert(waitpid(pid, &status, 0) == pid);
 	assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
 	assert(m.active_vt == 2);
+
+	/* Clear the 1s server lockout from the wrong1/wrong2/wrong3 checks above. */
+	c.auth_fail_count = 0;
+	c.auth_lockout_until_ms = 0;
+
+	/* Verify lock_confirmed persisted across cross-VT return to tty2, and
+	 * resets to false only on same-VT unlock. */
+	assert(controller_dispatch_auth(&c, 1000, "CONFIRM_LOCK 2\n",
+									resp, sizeof(resp)) == 0);
+	assert(controller_dispatch(&c, "HANDOFF 3\n", resp, sizeof(resp)) == 0);
+	assert(controller_dispatch(&c, "HANDOFF 2\n", resp, sizeof(resp)) == 0);
+	/* tty2 is still locked, so alice (uid=1000) is still allowed to AUTH and unlock tty2. */
+	assert(controller_dispatch_auth(&c, 1000, "AUTH shared\n",
+									resp, sizeof(resp)) == 0);
+	assert(strstr(resp, "PICK token=") != NULL);
+	char tok2[40] = {0};
+	assert(sscanf(resp, "PICK token=%39s", tok2) == 1);
+	snprintf(sel_cmd, sizeof(sel_cmd), "SELECT %s 0\n", tok2);
+	assert(controller_dispatch_auth(&c, 1000, sel_cmd,
+									resp, sizeof(resp)) == 0);
+	assert(strstr(resp, "OK user=alice uid=1000 vt=2") != NULL);
+	/* Now tty2 is unlocked: leaving tty2 must fail closed until re-confirmed. */
+	assert(controller_dispatch(&c, "LOCK\n", resp, sizeof(resp)) == -EAGAIN);
 
 	controller_cleanup(&c, true);
 }
