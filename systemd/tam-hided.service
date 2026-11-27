@@ -1,8 +1,9 @@
-# Prototype systemd unit for isolated VM testing only (Phase 2b).
-# Do NOT install on a live workstation until Phase 2b VM verification completes.
+# Whole-seat VT controller systemd unit (Phase P2a / 0.3.0).
+# Do NOT install on a live workstation without Fred's explicit approval
+# and a recorded rollback point.
 
 [Unit]
-Description=tam-hide whole-seat VT controller (isolated VM only)
+Description=tam-hide whole-seat VT controller
 Conflicts=getty@tty6.service autovt@tty6.service
 After=systemd-logind.service
 
@@ -13,6 +14,7 @@ RuntimeDirectoryMode=0755
 StateDirectory=tam-hide
 StateDirectoryMode=0700
 ExecStart=/usr/local/bin/tam-hided --lock-vt 6 --socket /run/tam-hide/control.sock --auth-socket /run/tam-hide/auth.sock --store /var/lib/tam-hide/passcodes.db
+ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=1
 

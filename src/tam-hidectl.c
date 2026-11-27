@@ -26,6 +26,7 @@ static void usage(const char *prog) {
 			"  unregister-session <VT>\n"
 			"  confirm-lock <VT>\n"
 			"  sessions\n"
+			"  reload-store\n"
 			"\n"
 			"Privileged passcode store commands (passcode read from stdin/TTY, never argv):\n"
 			"  passcode-set [--argon2-m KiB] [--argon2-t ITERS] <USER> <UID>\n"
@@ -297,6 +298,8 @@ int main(int argc, char **argv) {
 		snprintf(cmd, sizeof(cmd), "CONFIRM_LOCK %s\n", argv[argi + 1]);
 	} else if (strcmp(argv[argi], "sessions") == 0 && argi + 1 == argc) {
 		snprintf(cmd, sizeof(cmd), "SESSIONS\n");
+	} else if (strcmp(argv[argi], "reload-store") == 0 && argi + 1 == argc) {
+		snprintf(cmd, sizeof(cmd), "RELOAD_STORE\n");
 	} else {
 		usage(argv[0]);
 		return 2;

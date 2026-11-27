@@ -33,6 +33,13 @@ struct seat_session {
 	bool lock_confirmed;
 };
 
+struct session_snapshot_entry {
+	int vt_nr;
+	uid_t uid;
+	char username[TAM_HIDE_USER_MAX];
+	enum session_kind kind;
+};
+
 struct seat_pick_candidate {
 	int index;
 	uid_t uid;
@@ -69,6 +76,7 @@ struct seat_controller {
 
 	/* Privileged Argon2id passcode store and server-side backoff state. */
 	struct passcode_store store;
+	char store_path[256];
 	unsigned int auth_fail_count;
 	int64_t auth_lockout_until_ms;
 	struct pending_pick pending_pick;
@@ -97,6 +105,18 @@ int controller_enable_auth_socket(struct seat_controller *c,
 
 /* Load Argon2id passcode store from path into controller. */
 int controller_load_store(struct seat_controller *c, const char *store_path);
+
+/* Atomically reload passcodes.db from the previously configured store_path. */
+int controller_reload_store(struct seat_controller *c);
+
+/*
+ * Reconcile active seat0 sessions against an authoritative snapshot (e.g.
+ * systemd-logind). Preserves lock_confirmed for unchanged (vt, uid, kind)
+ * entries and fails closed back to lock_vt if the active user session ends.
+ */
+int controller_reconcile_sessions(struct seat_controller *c,
+								  const struct session_snapshot_entry *entries,
+								  size_t count);
 
 /* Handle one pending connection on listen_fd (root-only control socket). */
 int controller_handle_one(struct seat_controller *c);

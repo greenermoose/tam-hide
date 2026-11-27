@@ -13,10 +13,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/prctl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #ifndef TAM_HIDE_VERSION
-#define TAM_HIDE_VERSION "0.2.0"
+#define TAM_HIDE_VERSION "0.3.0"
 #endif
+
+#define TAM_HIDE_DEFAULT_AUTH_SOCKET "/run/tam-hide/auth.sock"
 
 static volatile sig_atomic_t g_stop = 0;
 
@@ -28,7 +32,7 @@ static void on_signal(int sig) {
 static void usage(const char *prog) {
 	fprintf(stderr,
 			"Usage: %s [--blank-after SECONDS] [--ready-fd FD]\n"
-			"          [--auth-socket PATH] [--session-vt N]\n"
+			"          [--auth-socket PATH] [--session-vt N] [--pam-only]\n"
 			"          [-v | --version] [-h | --help]\n"
 			"\n"
 			"tam-hide %s — Wayland ext-session-lock-v1 locker for tam-pane.\n"
@@ -41,11 +45,26 @@ static void usage(const char *prog) {
 			"                         ext_session_lock_v1.locked is confirmed.\n"
 			"  --auth-socket PATH     Authenticate via tam-hided's auth socket\n"
 			"                         (Argon2id multi-account/session picker).\n"
+			"                         When omitted, auto-connects to\n"
+			"                         %s if available.\n"
 			"  --session-vt N         Report CONFIRM_LOCK N to --auth-socket once\n"
-			"                         ext_session_lock_v1.locked is confirmed.\n"
+			"                         ext_session_lock_v1.locked is confirmed\n"
+			"                         (defaults to $XDG_VTNR when auto-connected).\n"
+			"  --pam-only             Always authenticate via local PAM even if\n"
+			"                         tam-hided's auth socket is available.\n"
 			"  -v, --version          Print version and exit.\n"
 			"  -h, --help             Show this help and exit.\n",
-			prog, TAM_HIDE_VERSION, TAM_HIDE_DEFAULT_BLANK_SEC);
+			prog, TAM_HIDE_VERSION, TAM_HIDE_DEFAULT_BLANK_SEC,
+			TAM_HIDE_DEFAULT_AUTH_SOCKET);
+}
+
+static bool auth_socket_available(const char *path) {
+	struct stat st;
+	if (!path || stat(path, &st) < 0)
+		return false;
+	if (!S_ISSOCK(st.st_mode))
+		return false;
+	return access(path, R_OK | W_OK) == 0;
 }
 
 static bool parse_int_range(const char *s, int min_v, int max_v, int *out) {
@@ -65,6 +84,7 @@ int main(int argc, char **argv) {
 	int ready_fd = -1;
 	const char *auth_socket = NULL;
 	int session_vt = 0;
+	bool pam_only = false;
 
 	for (int i = 1; i < argc; i++) {
 		if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
@@ -102,8 +122,23 @@ int main(int argc, char **argv) {
 			}
 			continue;
 		}
+		if (strcmp(argv[i], "--pam-only") == 0) {
+			pam_only = true;
+			continue;
+		}
 		usage(argv[0]);
 		return 2;
+	}
+
+	if (!auth_socket && !pam_only &&
+		auth_socket_available(TAM_HIDE_DEFAULT_AUTH_SOCKET)) {
+		auth_socket = TAM_HIDE_DEFAULT_AUTH_SOCKET;
+		if (session_vt == 0) {
+			const char *vtnr = getenv("XDG_VTNR");
+			if (vtnr)
+				(void)parse_int_range(vtnr, TAM_VT_MIN, TAM_VT_MAX,
+									  &session_vt);
+		}
 	}
 
 	/* Block ptrace and core dumps to protect password memory. */

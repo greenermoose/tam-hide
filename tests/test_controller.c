@@ -405,12 +405,119 @@ static void test_slow_client_is_dropped(void) {
 	controller_cleanup(&c, false);
 }
 
+static void test_reload_store(void) {
+	struct mock_vt m = { .active_vt = 6, .locked = false };
+	struct vt_ops ops = make_mock_ops(&m);
+	char sock[64], store_path[64];
+	snprintf(sock, sizeof(sock), "/tmp/tam-hide-reload-%d.sock", (int)getpid());
+	snprintf(store_path, sizeof(store_path), "/tmp/tam-hide-store-%d.db",
+			 (int)getpid());
+
+	struct passcode_params fast = { .t_cost = 1, .m_cost = 1024, .parallelism = 1 };
+	struct passcode_store s;
+	passcode_store_init(&s);
+	assert(passcode_store_set(&s, 1000, "alice", "alicepass", 9, &fast) == 0);
+	assert(passcode_store_save(&s, store_path) == 0);
+
+	struct seat_controller c;
+	assert(controller_init(&c, &ops, 6, sock, getuid()) == 0);
+	assert(controller_load_store(&c, store_path) == 0);
+
+	char resp[512];
+	assert(controller_dispatch(&c, "REGISTER_SESSION 2 1000 alice console\n",
+							   resp, sizeof(resp)) == 0);
+	assert(controller_dispatch(&c, "REGISTER_SESSION 3 1001 bob console\n",
+							   resp, sizeof(resp)) == 0);
+
+	assert(controller_dispatch_auth(&c, getuid(), "AUTH bobpass\n",
+									resp, sizeof(resp)) == -EACCES);
+
+	/* Update store on disk and hot-reload via RELOAD_STORE. */
+	assert(passcode_store_set(&s, 1001, "bob", "bobpass", 7, &fast) == 0);
+	assert(passcode_store_save(&s, store_path) == 0);
+	assert(controller_dispatch(&c, "RELOAD_STORE\n", resp, sizeof(resp)) == 0);
+	assert(strstr(resp, "OK reloaded count=2") != NULL);
+
+	assert(controller_dispatch_auth(&c, getuid(), "AUTH bobpass\n",
+									resp, sizeof(resp)) == 0);
+	assert(strstr(resp, "OK user=bob uid=1001 vt=3") != NULL);
+
+	/* Corrupt file on disk must fail closed and preserve existing in-memory store. */
+	FILE *fp = fopen(store_path, "w");
+	assert(fp != NULL);
+	fputs("corrupt garbage line without fields\n", fp);
+	fclose(fp);
+	assert(controller_dispatch(&c, "RELOAD_STORE\n", resp, sizeof(resp)) < 0);
+	assert(strstr(resp, "ERR reload_failed") != NULL);
+
+	/* Existing passcodes still work after failed reload. */
+	assert(controller_dispatch_auth(&c, getuid(), "AUTH alicepass\n",
+									resp, sizeof(resp)) == 0);
+	assert(strstr(resp, "OK user=alice uid=1000 vt=2") != NULL);
+
+	passcode_store_destroy(&s);
+	controller_cleanup(&c, true);
+	(void)unlink(store_path);
+}
+
+static void test_reconcile_sessions(void) {
+	struct mock_vt m = { .active_vt = 6, .locked = false };
+	struct vt_ops ops = make_mock_ops(&m);
+	char sock[64];
+	snprintf(sock, sizeof(sock), "/tmp/tam-hide-sync-%d.sock", (int)getpid());
+
+	struct seat_controller c;
+	assert(controller_init(&c, &ops, 6, sock, getuid()) == 0);
+
+	struct session_snapshot_entry snap1[] = {
+		{ .vt_nr = 2, .uid = 1000, .username = "alice", .kind = SESSION_KIND_GRAPHICAL },
+		{ .vt_nr = 3, .uid = 1001, .username = "bob", .kind = SESSION_KIND_CONSOLE },
+		{ .vt_nr = 6, .uid = 0, .username = "root", .kind = SESSION_KIND_CONSOLE },
+	};
+	assert(controller_reconcile_sessions(&c, snap1, 3) == 0);
+
+	char resp[1024];
+	assert(controller_dispatch(&c, "SESSIONS\n", resp, sizeof(resp)) == 0);
+	assert(strstr(resp, "OK count=2") != NULL);
+	assert(strstr(resp, "SESSION vt=2 uid=1000 user=alice kind=graphical locked=0") != NULL);
+	assert(strstr(resp, "SESSION vt=3 uid=1001 user=bob kind=console locked=1") != NULL);
+
+	/* Activate tty2 and confirm lock. */
+	assert(controller_dispatch(&c, "HANDOFF 2\n", resp, sizeof(resp)) == 0);
+	assert(controller_dispatch_auth(&c, 1000, "CONFIRM_LOCK 2\n",
+									resp, sizeof(resp)) == 0);
+
+	/* Reconciling a new session on tty4 must preserve tty2's lock_confirmed. */
+	struct session_snapshot_entry snap2[] = {
+		{ .vt_nr = 2, .uid = 1000, .username = "alice", .kind = SESSION_KIND_GRAPHICAL },
+		{ .vt_nr = 3, .uid = 1001, .username = "bob", .kind = SESSION_KIND_CONSOLE },
+		{ .vt_nr = 4, .uid = 1002, .username = "carol", .kind = SESSION_KIND_CONSOLE },
+	};
+	assert(controller_reconcile_sessions(&c, snap2, 3) == 0);
+	assert(controller_dispatch(&c, "SESSIONS\n", resp, sizeof(resp)) == 0);
+	assert(strstr(resp, "OK count=3") != NULL);
+	assert(strstr(resp, "SESSION vt=2 uid=1000 user=alice kind=graphical locked=1") != NULL);
+
+	/* If active tty2's session vanishes (compositor exit/crash), seat must return to lock_vt. */
+	struct session_snapshot_entry snap3[] = {
+		{ .vt_nr = 3, .uid = 1001, .username = "bob", .kind = SESSION_KIND_CONSOLE },
+	};
+	assert(controller_reconcile_sessions(&c, snap3, 1) == 0);
+	assert(m.active_vt == 6);
+	assert(c.state == SEAT_STATE_LOCKED);
+	assert(m.locked == true);
+
+	controller_cleanup(&c, true);
+}
+
 int main(void) {
 	test_slow_client_is_dropped();
 	test_startup_recovery_and_ipc();
 	test_fail_closed_on_activate_error();
 	test_lock_confirmation_gate();
 	test_auth_socket_and_multi_account_picker();
+	test_reload_store();
+	test_reconcile_sessions();
 	printf("test_controller: all tests passed\n");
 	return 0;
 }

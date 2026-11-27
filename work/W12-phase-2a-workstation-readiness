@@ -1,0 +1,53 @@
+W12 PHASE P2A WORKSTATION READINESS (0.3.0)
+
+Date: 2026-11-27
+AI harness: Antigravity CLI
+AI model: Gemini 4 Neon (Medium)
+Continues: W11
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice of tam-hide" -> reviewed plan in
+  tam-view ("show me your plan in tam-view") and approved ("Approved. Proceed.").
+
+DONE
+
+  - Implemented live `passcodes.db` hot-reload (`controller_reload_store()` in
+    `src/controller.{h,c}`, `RELOAD_STORE` IPC, `tam-hidectl reload-store`,
+    `SIGHUP` handler in `src/tam-hided.c`, `ExecReload` in
+    `systemd/tam-hided.service`); reload swaps atomically and keeps the
+    existing in-memory store intact on corrupt/unreadable files.
+  - Implemented automatic `seat0` session discovery and reconciliation
+    (`src/session_sync.{h,c}`, `controller_reconcile_sessions()` in
+    `src/controller.{h,c}`, `--no-logind` flag in `src/tam-hided.c`,
+    `USE_SYSTEMD?=1` in `Makefile`): tracks live `seat0` sessions via
+    `sd_login_monitor`, preserves `lock_confirmed` across unrelated session
+    changes, and atomically returns `seat0` to `lock_vt` if the active user
+    session ends (T4b).
+  - Implemented interactive non-disclosing console passcode and picker prompt
+    on `lock_vt` (`src/vt_prompt.{h,c}`, `--no-vt-prompt` in `src/tam-hided.c`)
+    with masked dots, server-side lockout, post-auth numbered picker
+    (`1-9`/arrows/`j`/`k`/`Esc`), 30s idle buffer wipe, and `explicit_bzero`.
+  - Added `/run/tam-hide/auth.sock` + `XDG_VTNR` auto-discovery in
+    `src/tam-hide.c` with seamless PAM fallback when `tam-hided` is absent and
+    a `--pam-only` opt-out.
+  - Added `install-seat` target to `Makefile` while keeping `install` as
+    `tam-hide`-only for Tamlinux 0.7.x source installs.
+  - Added unit tests for `RELOAD_STORE` and `controller_reconcile_sessions()`
+    in `tests/test_controller.c` and PTY-based end-to-end tests in
+    `tests/test_vt_prompt.c`.
+  - Verified both `make clean && make all test test-headless` (6 unit/PTY
+    suites + 2-output headless `tam-pane` integration suite) and
+    `make clean && make USE_SYSTEMD=0 all test` pass cleanly with `-Werror`.
+  - Created `plans/P2-workstation.md`, bumped `VERSION` to `0.3.0`, and updated
+    `ROADMAP.md`, `README`, and `work/WHATNOW`.
+
+FAILED
+
+  Nothing.
+
+HANDOFF
+
+  Phase P2a (0.3.0) is complete on `dev` with zero live host changes. Next
+  slice is Phase P2b (`0.3.1`): disposable KVM/QEMU verification of `0.3.0`
+  with `tam-pane` on DRM/KMS, `sd-login`, and the `tty6` console prompt.

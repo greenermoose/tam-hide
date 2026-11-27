@@ -2,6 +2,7 @@ CC ?= gcc
 PKG_CONFIG ?= pkg-config
 WAYLAND_SCANNER ?= wayland-scanner
 PREFIX ?= $(HOME)/.local
+USE_SYSTEMD ?= 1
 VERSION := $(shell tr -d '[:space:]' < VERSION)
 
 CFLAGS ?= -std=c17 -D_GNU_SOURCE -Wall -Wextra -Werror -O2 -g
@@ -14,6 +15,13 @@ WL_LIBS := $(shell $(PKG_CONFIG) --libs $(WL_PKGS)) -lm
 ARGON2_CFLAGS := $(shell $(PKG_CONFIG) --cflags libargon2)
 ARGON2_LIBS := $(shell $(PKG_CONFIG) --libs libargon2)
 PAM_LIBS := -lpam
+ifeq ($(USE_SYSTEMD),1)
+SYSTEMD_CFLAGS := -DTAM_HIDE_HAVE_SYSTEMD=1 $(shell $(PKG_CONFIG) --cflags libsystemd)
+SYSTEMD_LIBS := $(shell $(PKG_CONFIG) --libs libsystemd)
+else
+SYSTEMD_CFLAGS :=
+SYSTEMD_LIBS :=
+endif
 
 # libtam (sockets, atomic writes, clock), linked statically. 0.14.0 or later:
 # its socket line reader wipes request bytes, which may be passcodes.
@@ -48,7 +56,7 @@ PROTO_SRCS := $(SESSION_LOCK_C) $(IDLE_NOTIFY_C) $(OUTPUT_POWER_C)
 LOCK_CORE_SRCS := src/wl_lock.c src/render.c src/lock_state.c src/power_policy.c src/auth.c src/auth_controller.c $(PROTO_SRCS)
 LOCK_CORE_HDRS := src/wl_lock.h src/render.h src/lock_state.h src/power_policy.h src/auth.h src/auth_controller.h $(PROTO_HDRS)
 
-.PHONY: all test test-headless install clean
+.PHONY: all test test-headless install install-seat clean
 
 all: $(BUILD)/tam-hide $(BUILD)/tam-hided $(BUILD)/tam-hidectl
 
@@ -77,9 +85,9 @@ $(BUILD)/tam-hide: $(LIBTAM_ARCHIVE) src/tam-hide.c src/auth_pam.c $(LOCK_CORE_S
 	$(CC) $(CFLAGS) -Isrc -I$(PROTO_DIR) $(WL_CFLAGS) -o $@ \
 		src/tam-hide.c src/auth_pam.c $(LOCK_CORE_SRCS) $(LDFLAGS) $(WL_LIBS) $(PAM_LIBS)
 
-$(BUILD)/tam-hided: $(LIBTAM_ARCHIVE) src/tam-hided.c src/controller.c src/vt.c src/passcode_store.c src/controller.h src/vt.h src/passcode_store.h | $(BUILD)
-	$(CC) $(CFLAGS) -Isrc $(ARGON2_CFLAGS) -o $@ \
-		src/tam-hided.c src/controller.c src/vt.c src/passcode_store.c $(LDFLAGS) $(ARGON2_LIBS)
+$(BUILD)/tam-hided: $(LIBTAM_ARCHIVE) src/tam-hided.c src/controller.c src/vt.c src/passcode_store.c src/session_sync.c src/vt_prompt.c src/controller.h src/vt.h src/passcode_store.h src/session_sync.h src/vt_prompt.h | $(BUILD)
+	$(CC) $(CFLAGS) -Isrc $(ARGON2_CFLAGS) $(SYSTEMD_CFLAGS) -o $@ \
+		src/tam-hided.c src/controller.c src/vt.c src/passcode_store.c src/session_sync.c src/vt_prompt.c $(LDFLAGS) $(ARGON2_LIBS) $(SYSTEMD_LIBS)
 
 $(BUILD)/tam-hidectl: $(LIBTAM_ARCHIVE) src/tam-hidectl.c src/passcode_store.c src/passcode_store.h | $(BUILD)
 	$(CC) $(CFLAGS) -Isrc $(ARGON2_CFLAGS) -o $@ \
@@ -102,13 +110,18 @@ $(BUILD)/test_power_policy: tests/test_power_policy.c src/power_policy.c src/pow
 $(BUILD)/test_auth: tests/test_auth.c src/auth.c src/auth.h src/lock_state.h | $(BUILD)
 	$(CC) $(CFLAGS) -Isrc -o $@ tests/test_auth.c src/auth.c $(LDFLAGS)
 
+$(BUILD)/test_vt_prompt: tests/test_vt_prompt.c src/vt_prompt.c src/controller.c src/vt.c src/passcode_store.c src/vt_prompt.h src/controller.h src/vt.h src/passcode_store.h | $(BUILD)
+	$(CC) $(CFLAGS) -Isrc $(ARGON2_CFLAGS) -o $@ \
+		tests/test_vt_prompt.c src/vt_prompt.c src/controller.c src/vt.c src/passcode_store.c $(LDFLAGS) $(ARGON2_LIBS) -lutil
+
 $(BUILD)/test_wayland_lock: tests/test_wayland_lock.c $(LOCK_CORE_SRCS) $(LOCK_CORE_HDRS) | $(BUILD)
 	$(CC) $(CFLAGS) -Isrc -I$(PROTO_DIR) $(WL_CFLAGS) -o $@ \
 		tests/test_wayland_lock.c $(LOCK_CORE_SRCS) $(LDFLAGS) $(WL_LIBS)
 
-test: $(BUILD)/test_passcode_store $(BUILD)/test_controller $(BUILD)/test_lock_state $(BUILD)/test_power_policy $(BUILD)/test_auth $(BUILD)/test_wayland_lock
+test: $(BUILD)/test_passcode_store $(BUILD)/test_controller $(BUILD)/test_vt_prompt $(BUILD)/test_lock_state $(BUILD)/test_power_policy $(BUILD)/test_auth $(BUILD)/test_wayland_lock
 	./$(BUILD)/test_passcode_store
 	./$(BUILD)/test_controller
+	./$(BUILD)/test_vt_prompt
 	./$(BUILD)/test_lock_state
 	./$(BUILD)/test_power_policy
 	./$(BUILD)/test_auth
@@ -118,6 +131,10 @@ test-headless: $(BUILD)/test_wayland_lock $(BUILD)/tam-hide
 
 install: $(BUILD)/tam-hide
 	install -Dm755 $(BUILD)/tam-hide $(DESTDIR)$(PREFIX)/bin/tam-hide
+
+install-seat: $(BUILD)/tam-hided $(BUILD)/tam-hidectl
+	install -Dm755 $(BUILD)/tam-hided $(DESTDIR)$(PREFIX)/bin/tam-hided
+	install -Dm755 $(BUILD)/tam-hidectl $(DESTDIR)$(PREFIX)/bin/tam-hidectl
 
 clean:
 	rm -rf $(BUILD)

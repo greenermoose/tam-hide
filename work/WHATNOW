@@ -3,27 +3,38 @@ WHATNOW
 What tam-hide is doing now and what comes next. Read this first; revise it
 at the end of every session (work/README-work).
 
-Updated: 2026-11-27, with W11
+Updated: 2026-11-27, with W12
 
 STATE
 
-  Version 0.2.2 on dev (W11). Phase P1 (0.0.0-0.2.2) is complete and verified
-  end-to-end:
-  - Host unit tests (`test_passcode_store`, `test_controller`,
-    `test_lock_state`, `test_power_policy`, `test_auth`) and 2-output headless
-    `tam-pane` integration suite (`make test-headless`) pass.
-  - Phase 2b disposable KVM/QEMU Arch guest verification (VM1-VM8) passed
-    (`upstream/2026-11-27-phase2b-vm-verification.md`), including cross-VT
-    handoff fixes (`AUTH_HANDOFF` keeping the active graphical VT locked and
-    `lock_confirmed` persisting across cross-VT switches), real kernel
-    `VT_LOCKSWITCH`, Argon2id `passcodes.db`, `LOCK_UI_PICKER`, and `SIGKILL`
-    fail-closed recovery.
+  Version 0.3.0 on dev (W12). Phase P2a (workstation readiness) is complete
+  and verified on host (no live host changes):
+  - Live `passcodes.db` hot-reload (`RELOAD_STORE`, `tam-hidectl reload-store`,
+    `SIGHUP`, `ExecReload` in `systemd/tam-hided.service`) preserves the
+    existing store on corrupt/unreadable reloads and wipes pending `PICK`.
+  - Automatic `seat0` session discovery and reconciliation
+    (`src/session_sync.{h,c}`, `controller_reconcile_sessions()`) via
+    `libsystemd` `sd-login` (`USE_SYSTEMD?=1`, `--no-logind`, and portable
+    `USE_SYSTEMD=0` build), preserving `lock_confirmed` for unchanged
+    `(vt, uid, kind)` entries and failing closed to `lock_vt` when the active
+    user session ends.
+  - Interactive non-disclosing console passcode and picker prompt on `lock_vt`
+    (`src/vt_prompt.{h,c}`, `--no-vt-prompt`), tested end-to-end over a PTY
+    (`tests/test_vt_prompt.c`).
+  - `tam-hide` auto-discovers `/run/tam-hide/auth.sock` + `XDG_VTNR` with
+    seamless PAM fallback when `tam-hided` is absent (`--pam-only` opt-out).
+  - Verified with `make clean && make all test test-headless` (6 unit/PTY
+    suites + 2-output headless `tam-pane` suite) and
+    `make clean && make USE_SYSTEMD=0 all test`.
 
 NEXT
 
-  1. Plan live workstation / `tam-pane` DRM/KMS integration (for Tamlinux 0.8
-     Nash Pendula) once Fred authorizes live seat/login work with a recorded
-     rollback point.
+  1. Phase P2b (`0.3.1`): Run disposable KVM/QEMU verification of `0.3.0` with
+     `tam-pane` on DRM/KMS, `sd-login` automatic session discovery, `tty6`
+     console prompt unlock/picker, and `SIGHUP` passcode reload (zero live host
+     changes).
+  2. Phase P2c (`0.3.2`): Live workstation rollout once Fred selects a target
+     host and authorizes installation with a recorded rollback point.
 
 WAITING FOR FRED
 
@@ -34,4 +45,6 @@ WATCH OUT
 
   Do not install `systemd/tam-hided.service` on a live host without Fred's
   explicit approval and a recorded rollback point.
+  Keep `make install` installing `tam-hide` alone until live seat rollout is
+  authorized (`make install-seat` is opt-in).
   Never add auth-bypass CLI flags to `build/tam-hide`.

@@ -216,9 +216,107 @@ int controller_enable_auth_socket(struct seat_controller *c,
 }
 
 int controller_load_store(struct seat_controller *c, const char *store_path) {
-	if (!c || !store_path)
+	if (!c || !store_path || store_path[0] == '\0')
 		return -EINVAL;
+	if (strlen(store_path) >= sizeof(c->store_path))
+		return -ENAMETOOLONG;
+	snprintf(c->store_path, sizeof(c->store_path), "%s", store_path);
 	return passcode_store_load(&c->store, store_path);
+}
+
+int controller_reload_store(struct seat_controller *c) {
+	if (!c || c->store_path[0] == '\0')
+		return -EINVAL;
+
+	struct passcode_store tmp;
+	passcode_store_init(&tmp);
+	int rc = passcode_store_load(&tmp, c->store_path);
+	if (rc < 0) {
+		passcode_store_destroy(&tmp);
+		return rc;
+	}
+
+	passcode_store_destroy(&c->store);
+	c->store = tmp;
+	wipe_pending_pick(c);
+	return 0;
+}
+
+int controller_reconcile_sessions(struct seat_controller *c,
+								  const struct session_snapshot_entry *entries,
+								  size_t count) {
+	if (!c || (!entries && count > 0))
+		return -EINVAL;
+
+	bool active_was_registered =
+		(c->state == SEAT_STATE_ACTIVE_USER && c->active_vt != c->lock_vt &&
+		 find_session_by_vt(c, c->active_vt) != NULL);
+
+	bool seen[TAM_HIDE_MAX_SESSIONS];
+	memset(seen, 0, sizeof(seen));
+
+	for (size_t e = 0; e < count; e++) {
+		const struct session_snapshot_entry *ent = &entries[e];
+		if (ent->vt_nr < TAM_VT_MIN || ent->vt_nr > TAM_VT_MAX ||
+			ent->vt_nr == c->lock_vt)
+			continue;
+		if (!passcode_username_valid(ent->username))
+			continue;
+
+		int existing_idx = -1;
+		for (size_t i = 0; i < TAM_HIDE_MAX_SESSIONS; i++) {
+			if (c->sessions[i].active && c->sessions[i].vt_nr == ent->vt_nr) {
+				existing_idx = (int)i;
+				break;
+			}
+		}
+
+		if (existing_idx >= 0) {
+			struct seat_session *s = &c->sessions[existing_idx];
+			seen[existing_idx] = true;
+			bool same_owner = (s->uid == ent->uid && s->kind == ent->kind);
+			s->uid = ent->uid;
+			s->kind = ent->kind;
+			snprintf(s->username, sizeof(s->username), "%s", ent->username);
+			if (!same_owner)
+				s->lock_confirmed = (ent->kind == SESSION_KIND_CONSOLE);
+			continue;
+		}
+
+		for (size_t i = 0; i < TAM_HIDE_MAX_SESSIONS; i++) {
+			if (!c->sessions[i].active) {
+				struct seat_session *s = &c->sessions[i];
+				s->active = true;
+				s->vt_nr = ent->vt_nr;
+				s->uid = ent->uid;
+				snprintf(s->username, sizeof(s->username), "%s", ent->username);
+				s->kind = ent->kind;
+				s->lock_confirmed = (ent->kind == SESSION_KIND_CONSOLE);
+				seen[i] = true;
+				break;
+			}
+		}
+	}
+
+	for (size_t i = 0; i < TAM_HIDE_MAX_SESSIONS; i++) {
+		if (c->sessions[i].active && !seen[i])
+			memset(&c->sessions[i], 0, sizeof(c->sessions[i]));
+	}
+
+	if (active_was_registered && find_session_by_vt(c, c->active_vt) == NULL) {
+		wipe_pending_pick(c);
+		int hrc = vt_atomic_handoff(&c->vt, c->lock_vt, NULL);
+		if (hrc == 0) {
+			c->active_vt = c->lock_vt;
+			c->state = SEAT_STATE_LOCKED;
+			if (c->vt.render_banner)
+				(void)c->vt.render_banner(c->vt.ctx, c->lock_vt,
+										  "session ended");
+		}
+		return hrc;
+	}
+
+	return 0;
 }
 
 static int perform_handoff_to_vt(struct seat_controller *c, int target_vt,
@@ -722,6 +820,13 @@ int controller_dispatch(struct seat_controller *c,
 								 resp_size);
 	} else if (strcmp(buf, "SESSIONS") == 0) {
 		rc = handle_sessions_list(c, resp, resp_size);
+	} else if (strcmp(buf, "RELOAD_STORE") == 0) {
+		rc = controller_reload_store(c);
+		if (rc < 0) {
+			snprintf(resp, resp_size, "ERR reload_failed errno=%d\n", -rc);
+		} else {
+			snprintf(resp, resp_size, "OK reloaded count=%zu\n", c->store.count);
+		}
 	} else {
 		snprintf(resp, resp_size, "ERR unknown_command\n");
 		rc = -EINVAL;

@@ -3,29 +3,30 @@ TAM-HIDE - WORKSTATION PRIVACY FOR TAMLINUX
 tam-hide locks a Tamlinux workstation cleanly and without disclosing account
 or session details.
 
-Version 0.2.2 implements Phase 1/1b (`tam-hide` Wayland `ext-session-lock-v1`
-locker for `tam-pane` with PAM fallback and idle output blanking/wake via
-`ext_idle_notifier_v1` and `zwlr_output_power_manager_v1`), Phase 2a
-whole-seat authentication and lock-confirmation plumbing, and Phase 2b
-disposable KVM/QEMU VM end-to-end verification:
+Version 0.3.0 builds on Phase P1 (0.0.0-0.2.2) with Phase P2a workstation
+readiness:
 
 - Privileged Argon2id (`libargon2`, default m=65536 KiB, t=2, p=1) salted
   slow-hash passcode store (`passcode_store`, `tam-hidectl passcode-*`) with
-  constant-sweep matching across all accounts.
-- `tam-hided` session registry and compositor lock-confirmation gate (refuses
-  VT handoff away from an active graphical session until `CONFIRM_LOCK` fires),
-  plus a privilege-separated `auth.sock` with active-session `SO_PEERCRED`
+  constant-sweep matching across all accounts and atomic hot-reload
+  (`RELOAD_STORE`, `tam-hidectl reload-store`, `SIGHUP`).
+- `tam-hided` automatic `seat0` session discovery via `libsystemd` `sd-login`
+  (`USE_SYSTEMD?=1`, `--no-logind` / `USE_SYSTEMD=0` portable fallback),
+  compositor lock-confirmation gate, fail-closed return to `lock_vt` when an
+  active session ends, and privilege-separated `auth.sock` with `SO_PEERCRED`
   gating, server-side exponential lockout, and single-use 128-bit `PICK` tokens.
-- `tam-hide` `--ready-fd`, `--auth-socket`, `--session-vt`, cross-VT
-  `AUTH_HANDOFF` handling (keeping the current Wayland session locked when
-  switching to another VT), and post-auth multi-account/session picker UI
-  (`LOCK_UI_PICKER`).
+- Interactive non-disclosing console passcode and multi-account picker prompt
+  on `lock_vt` (`tty6`) inside `tam-hided` (`--no-vt-prompt` opt-out).
+- `tam-hide` Wayland `ext-session-lock-v1` locker for `tam-pane` with idle
+  output blanking/wake, automatic `/run/tam-hide/auth.sock` + `XDG_VTNR`
+  discovery (seamless PAM fallback when `tam-hided` is absent; `--pam-only`
+  opt-out), cross-VT `AUTH_HANDOFF`, and post-auth `LOCK_UI_PICKER`.
 
-Phase 2b (`upstream/2026-11-27-phase2b-vm-verification.md`) verified
-`tam-hided`, `tam-hide`, `VT_LOCKSWITCH`, and multi-account VT handoff
-end-to-end in a disposable Arch KVM guest. Installing `tam-hided.service` on a
-live workstation remains gated on Fred's explicit approval and a recorded
-rollback point.
+Phase 2b (`upstream/2026-11-27-phase2b-vm-verification.md`) verified P1
+end-to-end in a disposable Arch KVM guest; Phase P2b (`0.3.1`) will verify
+`0.3.0` with `tam-pane` on DRM/KMS in a disposable KVM guest. Installing
+`tam-hided.service` on a live workstation remains gated on Fred's explicit
+approval and a recorded rollback point.
 
 Follows the tam-idol 1.3.0 standard.
 
