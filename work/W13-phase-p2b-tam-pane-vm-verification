@@ -1,0 +1,53 @@
+W13 PHASE P2B DISPOSABLE KVM TAM-PANE DRM/KMS VERIFICATION (0.3.1)
+
+Date: 2026-11-27
+AI harness: Antigravity CLI
+AI model: Gemini 4 Neon (Medium)
+Continues: W12
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice of tam-hide" -> reviewed plan in
+  tam-view ("/plan review in tam-view") and approved ("Approved. proceed").
+
+DONE
+
+  - Booted a disposable Arch Linux KVM/QEMU guest (`7.2.11-arch1-1`,
+    `bochs-display` `1280x800`, `virtio-keyboard-pci`, read-only 9p staging,
+    zero live host changes) running `tam-pane` `0.2.14` on DRM/KMS (`tty4`,
+    `alice`, `Type=wayland`), console sessions on `tty2` (`carol`) and `tty3`
+    (`bob`), and `systemd/tam-hided.service`.
+  - Caught and fixed two real-world defects discovered during VM testing:
+    - Moved default `lock_vt` from `6` to `7` in `src/tam-hided.c` and
+      `systemd/tam-hided.service` (`Conflicts=getty@tty7.service
+      autovt@tty7.service`) so `systemd-logind`'s default `NAutoVTs=6` /
+      `ReserveVT=6` never spawns `agetty` onto the lock VT (which previously
+      stole `/dev/tty6` and echoed passcodes onto `archiso login:`).
+    - Handled `POLLHUP | POLLERR | POLLNVAL` on `prompt.fd` and `watcher` fd in
+      `src/tam-hided.c`, eliminating a 100% CPU busy loop after `vhangup()`.
+  - Verified full P2B-1 through P2B-10 matrix in KVM: `sd-login` automatic
+    `seat0` session discovery (zero manual `register-session`), `VT_LOCKSWITCH`
+    barrier, `tty7` interactive console prompt lockout/unlock/picker,
+    `tam-pane` DRM/KMS lock with `tam-hide` zero-flag auto-discovery,
+    cross-VT handoff + empirical `tam-pane` `wl_seat` VT-resume probe (first
+    keystroke wakes keyboard seat via `wl_keyboard.enter`, matching `sway`
+    1.12), live `SIGHUP` `passcodes.db` reload and corrupt-file preservation,
+    compositor exit T4b automatic return to locked `tty7`, `SIGKILL`
+    fail-closed resilience on both `tam-hide` (100% black on `tam-pane`) and
+    `tam-hided` (`VT_LOCKSWITCH` persists + `systemd` respawn to `tty7`), and
+    clean VM teardown.
+  - Verified host regression suites (`make clean && make all test test-headless`
+    and `make clean && make USE_SYSTEMD=0 all test`) pass cleanly with `-Werror`.
+  - Recorded `upstream/2026-11-27-phase-p2b-tam-pane-vm-verification.md`, bumped
+    `VERSION` to `0.3.1`, and updated `ROADMAP.md`, `plans/P2-workstation.md`,
+    `README`, and `work/WHATNOW`.
+
+FAILED
+
+  Nothing.
+
+HANDOFF
+
+  Phase P2b (`0.3.1`) is complete and KVM-verified on `dev` with zero live host
+  changes. Next slice is Phase P2c (`0.3.2`): Fred-authorized live workstation
+  rollout with target host selection and a recorded Snapper rollback point.

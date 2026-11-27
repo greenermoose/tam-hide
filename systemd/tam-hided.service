@@ -4,7 +4,9 @@
 
 [Unit]
 Description=tam-hide whole-seat VT controller
-Conflicts=getty@tty6.service autovt@tty6.service
+# VT 7 sits outside systemd-logind's default NAutoVTs=6 / ReserveVT=6 range so
+# autovt/agetty will not race onto the lock VT and echo passcodes.
+Conflicts=getty@tty7.service autovt@tty7.service
 After=systemd-logind.service
 
 [Service]
@@ -13,7 +15,7 @@ RuntimeDirectory=tam-hide
 RuntimeDirectoryMode=0755
 StateDirectory=tam-hide
 StateDirectoryMode=0700
-ExecStart=/usr/local/bin/tam-hided --lock-vt 6 --socket /run/tam-hide/control.sock --auth-socket /run/tam-hide/auth.sock --store /var/lib/tam-hide/passcodes.db
+ExecStart=/usr/local/bin/tam-hided --lock-vt 7 --socket /run/tam-hide/control.sock --auth-socket /run/tam-hide/auth.sock --store /var/lib/tam-hide/passcodes.db
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=1

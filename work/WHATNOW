@@ -3,38 +3,34 @@ WHATNOW
 What tam-hide is doing now and what comes next. Read this first; revise it
 at the end of every session (work/README-work).
 
-Updated: 2026-11-27, with W12
+Updated: 2026-11-27, with W13
 
 STATE
 
-  Version 0.3.0 on dev (W12). Phase P2a (workstation readiness) is complete
-  and verified on host (no live host changes):
-  - Live `passcodes.db` hot-reload (`RELOAD_STORE`, `tam-hidectl reload-store`,
-    `SIGHUP`, `ExecReload` in `systemd/tam-hided.service`) preserves the
-    existing store on corrupt/unreadable reloads and wipes pending `PICK`.
-  - Automatic `seat0` session discovery and reconciliation
-    (`src/session_sync.{h,c}`, `controller_reconcile_sessions()`) via
-    `libsystemd` `sd-login` (`USE_SYSTEMD?=1`, `--no-logind`, and portable
-    `USE_SYSTEMD=0` build), preserving `lock_confirmed` for unchanged
-    `(vt, uid, kind)` entries and failing closed to `lock_vt` when the active
-    user session ends.
-  - Interactive non-disclosing console passcode and picker prompt on `lock_vt`
-    (`src/vt_prompt.{h,c}`, `--no-vt-prompt`), tested end-to-end over a PTY
-    (`tests/test_vt_prompt.c`).
-  - `tam-hide` auto-discovers `/run/tam-hide/auth.sock` + `XDG_VTNR` with
-    seamless PAM fallback when `tam-hided` is absent (`--pam-only` opt-out).
-  - Verified with `make clean && make all test test-headless` (6 unit/PTY
-    suites + 2-output headless `tam-pane` suite) and
-    `make clean && make USE_SYSTEMD=0 all test`.
+  Version 0.3.1 on dev (W13). Phase P2b (disposable KVM/QEMU `tam-pane`
+  DRM/KMS verification) is complete with zero live host changes
+  (`upstream/2026-11-27-phase-p2b-tam-pane-vm-verification.md`):
+  - Verified `tam-pane` `0.2.14` on DRM/KMS (`tty4`), `sd-login` automatic
+    `seat0` session discovery (zero manual `register-session`), `tty7`
+    interactive console prompt lockout/unlock/picker, `tam-hide` zero-flag
+    auto-discovery, cross-VT handoff + `wl_seat` VT-resume behavior, live
+    `SIGHUP` `passcodes.db` reload + corrupt-DB preservation, compositor exit
+    T4b fail-closed return to `tty7`, and `SIGKILL` resilience on both
+    `tam-hide` and `tam-hided`.
+  - Fixed two real-world defects caught in the VM:
+    - Default `lock_vt` moved from `6` to `7` (`src/tam-hided.c`,
+      `systemd/tam-hided.service`) to stay outside `systemd-logind`'s
+      `NAutoVTs=6` / `ReserveVT=6` range so `agetty` never races onto the lock
+      VT.
+    - Handled `POLLHUP | POLLERR | POLLNVAL` on `prompt.fd` and `watcher` fd in
+      `src/tam-hided.c`, eliminating a 100% CPU busy loop on TTY hangup.
+  - Verified host regression suites (`make clean && make all test test-headless`
+    and `make clean && make USE_SYSTEMD=0 all test`) pass cleanly with `-Werror`.
 
 NEXT
 
-  1. Phase P2b (`0.3.1`): Run disposable KVM/QEMU verification of `0.3.0` with
-     `tam-pane` on DRM/KMS, `sd-login` automatic session discovery, `tty6`
-     console prompt unlock/picker, and `SIGHUP` passcode reload (zero live host
-     changes).
-  2. Phase P2c (`0.3.2`): Live workstation rollout once Fred selects a target
-     host and authorizes installation with a recorded rollback point.
+  1. Phase P2c (`0.3.2`): Live workstation rollout once Fred selects a target
+     host and authorizes installation with a recorded Snapper rollback point.
 
 WAITING FOR FRED
 

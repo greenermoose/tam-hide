@@ -3,8 +3,8 @@ TAM-HIDE - WORKSTATION PRIVACY FOR TAMLINUX
 tam-hide locks a Tamlinux workstation cleanly and without disclosing account
 or session details.
 
-Version 0.3.0 builds on Phase P1 (0.0.0-0.2.2) with Phase P2a workstation
-readiness:
+Version 0.3.1 builds on Phase P1 (0.0.0-0.2.2) with Phase P2a workstation
+readiness and Phase P2b disposable KVM `tam-pane` DRM/KMS verification:
 
 - Privileged Argon2id (`libargon2`, default m=65536 KiB, t=2, p=1) salted
   slow-hash passcode store (`passcode_store`, `tam-hidectl passcode-*`) with
@@ -16,15 +16,16 @@ readiness:
   active session ends, and privilege-separated `auth.sock` with `SO_PEERCRED`
   gating, server-side exponential lockout, and single-use 128-bit `PICK` tokens.
 - Interactive non-disclosing console passcode and multi-account picker prompt
-  on `lock_vt` (`tty6`) inside `tam-hided` (`--no-vt-prompt` opt-out).
+  on `lock_vt` (`tty7`, outside `systemd-logind`'s `NAutoVTs=6` / `ReserveVT=6`
+  range) inside `tam-hided` (`--no-vt-prompt` opt-out).
 - `tam-hide` Wayland `ext-session-lock-v1` locker for `tam-pane` with idle
   output blanking/wake, automatic `/run/tam-hide/auth.sock` + `XDG_VTNR`
   discovery (seamless PAM fallback when `tam-hided` is absent; `--pam-only`
   opt-out), cross-VT `AUTH_HANDOFF`, and post-auth `LOCK_UI_PICKER`.
 
-Phase 2b (`upstream/2026-11-27-phase2b-vm-verification.md`) verified P1
-end-to-end in a disposable Arch KVM guest; Phase P2b (`0.3.1`) will verify
-`0.3.0` with `tam-pane` on DRM/KMS in a disposable KVM guest. Installing
+Phase P2b (`upstream/2026-11-27-phase-p2b-tam-pane-vm-verification.md`)
+verified `0.3.1` end-to-end with `tam-pane` on DRM/KMS, `sd-login`, the `tty7`
+console prompt, and `SIGHUP` reload in a disposable Arch KVM guest. Installing
 `tam-hided.service` on a live workstation remains gated on Fred's explicit
 approval and a recorded rollback point.
 

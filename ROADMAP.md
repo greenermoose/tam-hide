@@ -4,8 +4,8 @@
 controller (`tam-hide`, `tam-hided`, `tam-hidectl`), written in C17 on
 top of `libtam`.
 
-- **Current version:** `0.3.0` (branch `dev`)
-- **Progress:** Phase P1 complete (`0.0.0`–`0.2.2` VM-verified); Phase P2a (`0.3.0`) workstation readiness done on `dev`; Phase P2b (`0.3.1` disposable KVM `tam-pane` DRM/KMS verification) next
+- **Current version:** `0.3.1` (branch `dev`)
+- **Progress:** Phase P1 complete (`0.0.0`–`0.2.2` VM-verified); Phase P2a (`0.3.0`) workstation readiness and Phase P2b (`0.3.1` disposable KVM `tam-pane` DRM/KMS verification) done on `dev`; Phase P2c (`0.3.2` Fred-authorized live workstation rollout) next
 - **Versioning:** Semantic versioning; minor marks a locking capability
   tier, patch fixes defects or hardens protocols and IPC.
 
@@ -14,7 +14,7 @@ top of `libtam`.
 | Phase | Versions | Goal | Plan | Status |
 | --- | --- | --- | --- | --- |
 | **P1** | 0.0.0–0.2.2 | Wayland `ext-session-lock-v1` locker, output blanking/wake, Argon2id whole-seat controller, and KVM VM verification | [P1-lock.md](plans/P1-lock.md) | Done (VM-verified) |
-| **P2** | 0.3.0–0.3.x | Workstation readiness (`sd-login` sync, `tty6` prompt, store reload, auto-discovery) and `tam-pane` DRM/KMS integration | [P2-workstation.md](plans/P2-workstation.md) | In progress (`0.3.0`) |
+| **P2** | 0.3.0–0.3.x | Workstation readiness (`sd-login` sync, `tty7` prompt, store reload, auto-discovery) and `tam-pane` DRM/KMS integration | [P2-workstation.md](plans/P2-workstation.md) | In progress (`0.3.1`, VM-verified) |
 
 ## Phases and milestones
 
@@ -34,7 +34,7 @@ top of `libtam`.
 | Version | Milestone | Status |
 | --- | --- | --- |
 | **0.3.0** | Phase P2a: `sd-login` automatic `seat0` session sync, live `passcodes.db` reload (`RELOAD_STORE`/`SIGHUP`), interactive `lock_vt` console prompt, and `tam-hide` controller auto-discovery | Done (2026-11-27) |
-| **0.3.1** | Phase P2b: disposable KVM/QEMU verification with `tam-pane` on DRM/KMS, `sd-login`, and `tty6` prompt | Planned |
+| **0.3.1** | Phase P2b: disposable KVM/QEMU verification with `tam-pane` on DRM/KMS, `sd-login`, `tty7` prompt (fixing `autovt`/`ReserveVT=6` race and `POLLHUP` spin), and `SIGHUP` reload | Done (2026-11-27) |
 | **0.3.2** | Phase P2c: Fred-authorized live workstation rollout with recorded rollback point | Planned (awaits Fred) |
 
 ## How a milestone is done

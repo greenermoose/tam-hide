@@ -41,7 +41,7 @@ static void usage(const char *prog) {
 }
 
 int main(int argc, char **argv) {
-	int lock_vt = 6;
+	int lock_vt = 7;
 	const char *socket_path = "/run/tam-hide/control.sock";
 	const char *auth_socket_path = NULL;
 	const char *auth_group = NULL;
@@ -241,11 +241,29 @@ int main(int argc, char **argv) {
 				(void)controller_handle_one(&ctrl);
 			if (idx_auth >= 0 && (pfds[idx_auth].revents & POLLIN))
 				(void)controller_handle_auth_one(&ctrl);
-			if (idx_watch >= 0 && (pfds[idx_watch].revents & POLLIN))
-				(void)session_watcher_sync(&watcher, &ctrl);
-			if (idx_prompt >= 0 && (pfds[idx_prompt].revents & POLLIN) &&
-				ctrl.state == SEAT_STATE_LOCKED)
-				(void)vt_prompt_handle_input(&prompt, &ctrl);
+			if (idx_watch >= 0) {
+				if (pfds[idx_watch].revents & (POLLHUP | POLLERR | POLLNVAL)) {
+					fprintf(stderr, "tam-hided: logind watcher hung up; disabling\n");
+					fflush(stderr);
+					session_watcher_destroy(&watcher);
+				} else if (pfds[idx_watch].revents & POLLIN) {
+					(void)session_watcher_sync(&watcher, &ctrl);
+				}
+			}
+			if (idx_prompt >= 0) {
+				if (pfds[idx_prompt].revents & (POLLHUP | POLLERR | POLLNVAL)) {
+					vt_prompt_destroy(&prompt);
+					if (vt_prompt_init_vt(&prompt, lock_vt) < 0) {
+						fprintf(stderr,
+								"tam-hided: tty%d prompt hung up; disabling\n",
+								lock_vt);
+						fflush(stderr);
+					}
+				} else if ((pfds[idx_prompt].revents & POLLIN) &&
+						   ctrl.state == SEAT_STATE_LOCKED) {
+					(void)vt_prompt_handle_input(&prompt, &ctrl);
+				}
+			}
 		}
 
 		if (prompt.active) {

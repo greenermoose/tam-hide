@@ -1,6 +1,6 @@
 # P2: Workstation readiness and `tam-pane` DRM/KMS integration
 
-- **Status:** in progress (`0.3.0` Phase P2a done on `dev`; `0.3.1` Phase P2b disposable KVM `tam-pane` DRM/KMS verification next)
+- **Status:** in progress (`0.3.1` Phase P2b disposable KVM `tam-pane` DRM/KMS verification done on `dev`; `0.3.2` Phase P2c live workstation rollout awaits Fred)
 - **Versions:** `0.3.0` to `0.3.x`
 
 ## Goal
@@ -37,13 +37,19 @@ installation.
      `--pam-only` opt-out).
    - **Packaging hygiene:** `make install` remains `tam-hide`-only for Tamlinux
      `0.7.x`; opt-in `make install-seat` installs `tam-hided` and `tam-hidectl`.
-2. **Phase P2b (`0.3.1`, next): Disposable KVM `tam-pane` DRM/KMS verification**
-   - Boot a disposable Arch KVM guest with `tam-pane` on DRM/KMS,
-     `tam-hided.service` (`sd-login` + `tty6` prompt), and `tam-hide`
+2. **Phase P2b (`0.3.1`, done in W13): Disposable KVM `tam-pane` DRM/KMS verification**
+   - Booted a disposable Arch KVM guest with `tam-pane` `0.2.14` on DRM/KMS,
+     `tam-hided.service` (`sd-login` + `lock_vt` prompt), and `tam-hide`
      auto-discovery (no manual `tam-hidectl register-session` or `handoff`).
-   - Verify `tam-pane`'s `wl_seat` resume behavior across VT switches, `tty6`
-     unlock and picker handoff, `SIGHUP` passcode reload, compositor crash
-     return to `tty6`, and `SIGKILL` resilience.
+   - Caught and fixed two real-world defects: moved default `lock_vt` from `6`
+     to `7` (avoiding `systemd-logind`'s `NAutoVTs=6` / `ReserveVT=6` race
+     where `agetty` stole `/dev/tty6` and echoed passcodes) and handled
+     `POLLHUP | POLLERR | POLLNVAL` on `prompt.fd` and `watcher` fd in
+     `src/tam-hided.c` (eliminating a 100% CPU busy loop after `vhangup()`).
+   - Verified P2B-1–P2B-10 (`upstream/2026-11-27-phase-p2b-tam-pane-vm-verification.md`),
+     including `tam-pane`'s `wl_seat` VT-resume behavior, `tty7` unlock and
+     picker handoff, `SIGHUP` passcode reload + corrupt-DB preservation,
+     compositor exit T4b return to `tty7`, and `SIGKILL` resilience.
 3. **Phase P2c (`0.3.2`, awaits Fred): Live workstation rollout**
    - Install and verify on a Fred-selected host with an explicit approval and
      recorded Snapper rollback point.
